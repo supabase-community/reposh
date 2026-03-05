@@ -2,7 +2,7 @@ import { generateKeyPairSync, createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { Bash, defineCommand, OverlayFs } from 'just-bash';
+import { makeBash, makeProgressWriter, execCommand } from './run-command.js';
 import type {
   Connection,
   AuthContext,
@@ -19,19 +19,6 @@ const require = createRequire(import.meta.url);
 const { Server } = require('ssh2');
 
 const PORT = parseInt(process.env.PORT ?? '22', 10);
-
-const aliasCommands = [
-  defineCommand('ll', (args, ctx) =>
-    ctx.exec!(`ls -alF ${args.join(' ')}`, { cwd: ctx.cwd }),
-  ),
-  defineCommand('la', (args, ctx) =>
-    ctx.exec!(`ls -a ${args.join(' ')}`, { cwd: ctx.cwd }),
-  ),
-  defineCommand('l', (args, ctx) =>
-    ctx.exec!(`ls -CF ${args.join(' ')}`, { cwd: ctx.cwd }),
-  ),
-];
-
 
 const HOST_KEY_PATH = resolve(process.env.HOST_KEY_PATH ?? './host_key');
 
@@ -55,24 +42,6 @@ async function loadOrCreateHostKey(): Promise<Buffer> {
   }
 }
 
-function makeBash(repoDir: string, prefix: string) {
-  const overlay = new OverlayFs({ root: repoDir, mountPoint: prefix, readOnly: true });
-  return new Bash({ fs: overlay, cwd: prefix, customCommands: aliasCommands });
-}
-
-// For interactive terminals: pass messages through as-is (animated \r\x1b[K updates).
-// For non-PTY callers (LLMs, scripts): emit one plain line per phase, no ANSI.
-function makeProgressWriter(write: (msg: string) => void, animated: boolean): (msg: string) => void {
-  if (animated) return write;
-  let lastPhase = '';
-  return (msg: string) => {
-    // Plain messages (no ANSI) pass through as-is
-    if (!msg.includes('\x1b')) { write(msg); return; }
-    const m = msg.replace(/\r\x1b\[K/g, '').match(/^(Cloning [^:]+): ([^(]+)/);
-    if (m) { const line = `${m[1]}: ${m[2].trim()}`; if (line !== lastPhase) { lastPhase = line; write(`${line}\n`); } }
-  };
-}
-
 async function main() {
   const hostKey = await loadOrCreateHostKey();
 
@@ -89,16 +58,25 @@ async function main() {
       client.on('session', (accept: AcceptConnection<Session>) => {
         const session = accept();
         let hasPty = false;
-        session.on('pty', (accept: () => void) => { hasPty = true; accept(); });
+        session.on('pty', (accept: () => void) => {
+          hasPty = true;
+          accept();
+        });
 
         const target = parseRepoTarget(username);
 
-        const prefix = target ? `/repos/${target.host}/${target.org}/${target.repo}` : '';
+        const prefix = target
+          ? `/repos/${target.host}/${target.org}/${target.repo}`
+          : '';
 
         const resolveRepo = (onProgress: (msg: string) => void) =>
           target
             ? ensureRepo(target, onProgress)
-            : Promise.reject(new Error('Usage: ssh <org>/<repo>@<host> [command]\nExample: ssh supabase/supabase@repo.now ls'));
+            : Promise.reject(
+                new Error(
+                  'Usage: ssh <org>/<repo>@<host> [command]\nExample: ssh supabase/supabase@repo.now ls',
+                ),
+              );
 
         session.on(
           'exec',
@@ -113,7 +91,9 @@ async function main() {
 
             let repoDir: string;
             try {
-              repoDir = await resolveRepo(makeProgressWriter((msg) => channel.stderr.write(msg), hasPty));
+              repoDir = await resolveRepo(
+                makeProgressWriter((msg) => channel.stderr.write(msg), hasPty),
+              );
             } catch (err) {
               channel.stderr.write(
                 `${err instanceof Error ? err.message : String(err)}\n`,
@@ -125,10 +105,13 @@ async function main() {
 
             try {
               const bash = makeBash(repoDir, prefix);
-              const result = await bash.exec(command);
-              if (result.stdout) channel.write(result.stdout);
-              if (result.stderr) channel.stderr.write(result.stderr);
-              channel.exit(result.exitCode);
+              const code = await execCommand(
+                bash,
+                command,
+                (s) => channel.write(s),
+                (s) => channel.stderr.write(s),
+              );
+              channel.exit(code);
             } catch (err) {
               channel.stderr.write(
                 `Error: ${err instanceof Error ? err.message : String(err)}\n`,
@@ -145,7 +128,9 @@ async function main() {
 
           let repoDir: string;
           try {
-            repoDir = await resolveRepo((msg) => channel.write(msg.replace(/\n/g, '\r\n')));
+            repoDir = await resolveRepo((msg) =>
+              channel.write(msg.replace(/\n/g, '\r\n')),
+            );
           } catch (err) {
             channel.write(
               `${err instanceof Error ? err.message : String(err)}\r\n`,
@@ -166,17 +151,18 @@ async function main() {
                 channel.write('\r\n');
                 const command = buf.trim();
                 buf = '';
-                if (command === 'exit' || command === 'quit') {
+                if (command === 'exit') {
                   channel.end();
                   return;
                 }
                 if (command) {
                   try {
-                    const result = await bash.exec(command);
-                    if (result.stdout)
-                      channel.write(result.stdout.replace(/\n/g, '\r\n'));
-                    if (result.stderr)
-                      channel.write(result.stderr.replace(/\n/g, '\r\n'));
+                    await execCommand(
+                      bash,
+                      command,
+                      (s) => channel.write(s.replace(/\n/g, '\r\n')),
+                      (s) => channel.write(s.replace(/\n/g, '\r\n')),
+                    );
                   } catch (err) {
                     channel.write(
                       `Error: ${err instanceof Error ? err.message : String(err)}\r\n`,

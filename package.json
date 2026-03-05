@@ -1,8 +1,15 @@
 {
-  "name": "repo-over-ssh",
+  "name": "repocat",
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "repocat": "./dist/cli.js"
+  },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
+    "build": "tsc",
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts"
   },
