@@ -1,0 +1,14 @@
+services:
+  repo-ssh:
+    build: .
+    ports:
+      - '22:22'
+    volumes:
+      - ./keys:/app/keys
+      - repo-cache:/tmp/repo-cache
+    environment:
+      HOST_KEY_PATH: /app/keys/host_key
+      CACHE_DIR: /tmp/repo-cache
+
+volumes:
+  repo-cache:
