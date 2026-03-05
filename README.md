@@ -51,7 +51,7 @@ Cloned repos are persisted in a named volume (`repo-cache`) across restarts.
 | --------------- | ----------------- | ------------------------------- |
 | `PORT`          | `22`              | SSH server port                 |
 | `HOST_KEY_PATH` | `./host_key`      | Path to RSA host key            |
-| `CACHE_DIR`     | `/tmp/repo-cache` | Where clones are stored         |
+| `CACHE_DIR`     | `~/.cache/repocat`       | Where clones are stored    |
 | `CACHE_TTL_MS`  | `300000` (5 min)  | How long before pulling updates |
 
 ## Caching

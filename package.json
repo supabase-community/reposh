@@ -7,7 +7,6 @@
     "dev": "tsx watch src/server.ts"
   },
   "dependencies": {
-    "isomorphic-git": "^1.37.2",
     "just-bash": "latest",
     "ssh2": "^1.16.0"
   },
