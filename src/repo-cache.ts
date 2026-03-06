@@ -1,10 +1,8 @@
 import { rm, mkdir, stat } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { homedir } from 'node:os'
 import type { RepoTarget } from './parse-target.js'
-
-const CACHE_DIR = resolve(process.env.CACHE_DIR ?? join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'repocat'))
+import { CACHE_DIR } from './paths.js'
 const CACHE_TTL_MS = parseInt(process.env.CACHE_TTL_MS ?? '300000', 10)
 
 // Per-repo locks to prevent concurrent clones/pulls

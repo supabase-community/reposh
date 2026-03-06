@@ -1,8 +1,17 @@
-# repo-over-ssh
+# reposh
 
 Browse any public GitHub repo over SSH using standard Unix tools. Designed for LLM consumption.
 
 Commands run inside [just-bash](https://github.com/vercel-labs/just-bash) - a sandboxed in-memory shell - so it's safe to expose publicly. Repos are cloned on demand and cached.
+
+## Quick start
+
+```bash
+npx reposh ssh install
+ssh supabase/supabase@reposh ls
+```
+
+`ssh install` globally installs `reposh` and adds a `Host reposh` block to `~/.ssh/config`.
 
 ## Usage
 
@@ -10,53 +19,49 @@ The SSH username encodes the repo: `org/repo` (assumes GitHub) or `host/org/repo
 
 ```bash
 # List files
-ssh supabase/supabase@repo.cat ls
+ssh supabase/supabase@reposh ls
 
 # Search across the repo
-ssh supabase/supabase@repo.cat "grep -r 'vector' src/"
+ssh supabase/supabase@reposh "grep -r 'vector' src/"
 
 # Read a file
-ssh supabase/supabase@repo.cat cat README.md
+ssh supabase/supabase@reposh cat README.md
 
 # Pipe commands (always quote to prevent local shell expansion)
-ssh supabase/supabase@repo.cat "find . -name '*.ts' | head -20"
+ssh supabase/supabase@reposh "find . -name '*.ts' | head -20"
 
 # Interactive shell
-ssh supabase/supabase@repo.cat
+ssh supabase/supabase@reposh
 
 # Explicit git host (GitLab, etc.)
-ssh gitlab.com/some-org/some-repo@repo.cat ls
+ssh gitlab.com/some-org/some-repo@reposh ls
 ```
 
-## Setup
+Or use the CLI directly:
+
+```bash
+npx reposh supabase/supabase ls
+```
+
+## Self-hosting
 
 ```bash
 pnpm install
-pnpm dev
+pnpm dev        # start SSH server on port 22
 ```
-
-The server listens on port 22 by default. A host key is generated on first run and saved to `keys/host_key`.
-
-### Docker
-
-```bash
-docker compose up
-```
-
-Cloned repos are persisted in a named volume (`repo-cache`) across restarts.
 
 ## Configuration
 
-| Env var         | Default           | Description                     |
-| --------------- | ----------------- | ------------------------------- |
-| `PORT`          | `22`              | SSH server port                 |
-| `HOST_KEY_PATH` | `./host_key`      | Path to RSA host key            |
-| `CACHE_DIR`     | `~/.cache/repocat`       | Where clones are stored    |
-| `CACHE_TTL_MS`  | `300000` (5 min)  | How long before pulling updates |
+| Env var         | Default                  | Description                     |
+| --------------- | ------------------------ | ------------------------------- |
+| `PORT`          | `22`                     | SSH server port                 |
+| `HOST_KEY_PATH` | `~/.reposh/host_key`     | Path to RSA host key            |
+| `CACHE_DIR`     | `~/.reposh/cache`        | Where clones are stored         |
+| `CACHE_TTL_MS`  | `300000` (5 min)         | How long before pulling updates |
 
 ## Caching
 
-On first access a shallow clone (`depth=1`) is created under `CACHE_DIR/<host>/<org>/<repo>/`. Subsequent requests within the TTL are served from cache. After the TTL, a `git pull` runs in the background and the current session is served stale. If pull fails (e.g. force-push), it falls back to a full re-clone.
+On first access a shallow clone (`depth=1`) is created under `CACHE_DIR/<host>/<org>/<repo>/`. Subsequent requests within the TTL are served from cache. After the TTL a `git pull` runs; if it fails it falls back to a full re-clone.
 
 ## Aliases
 

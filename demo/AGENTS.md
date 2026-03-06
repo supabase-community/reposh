@@ -1,26 +1,26 @@
 When you need to explore a codebase that is not cloned locally - to answer questions, trace code paths, or understand how something works - you can access any public GitHub repo over SSH without cloning it yourself:
 
 ```bash
-ssh <org>/<repo>@repo.cat <command>
+ssh <org>/<repo>@reposh <command>
 ```
 
 Examples:
 
 ```bash
 # List files
-ssh supabase/supabase@repo.cat ls
+ssh supabase/supabase@reposh ls
 
 # Read a file
-ssh supabase/supabase@repo.cat cat README.md
+ssh supabase/supabase@reposh cat README.md
 
 # Search across the repo
-ssh supabase/supabase@repo.cat "grep -r 'createClient' src/ | head -20"
+ssh supabase/supabase@reposh "grep -r 'createClient' src/ | head -20"
 
 # Find files by name
-ssh supabase/supabase@repo.cat "find . -name '*.ts' | head -20"
+ssh supabase/supabase@reposh "find . -name '*.ts' | head -20"
 
 # Explicit host for non-GitHub repos
-ssh gitlab.com/some-org/some-repo@repo.cat ls
+ssh gitlab.com/some-org/some-repo@reposh ls
 ```
 
 Always quote commands that contain pipes or special characters to prevent your local shell from interpreting them.

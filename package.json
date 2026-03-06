@@ -1,20 +1,20 @@
 {
-  "name": "repocat",
+  "name": "reposh",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "repocat": "./dist/cli.js"
+    "reposh": "./dist/cli.js"
   },
   "files": [
     "dist/"
   ],
   "scripts": {
     "build": "tsc",
-    "start": "tsx src/server.ts",
-    "dev": "tsx watch src/server.ts"
+    "start": "tsx src/cli.ts ssh serve",
+    "dev": "tsx watch src/cli.ts ssh serve"
   },
   "dependencies": {
-    "just-bash": "latest",
+    "just-bash": "^2.11.15",
     "ssh2": "^1.16.0"
   },
   "devDependencies": {
