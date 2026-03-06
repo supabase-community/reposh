@@ -73,7 +73,7 @@ function handleConnection(client: Connection, log: Log): void {
           ? ensureRepo(target, onProgress)
           : Promise.reject(
               new Error(
-                'Usage: ssh <org>/<repo>@<host> [command]\nExample: ssh supabase/supabase@reposh ls',
+                'Usage: ssh <org>/<repo>@<host> [command]\nExample: ssh facebook/react@reposh ls',
               ),
             );
 
@@ -241,7 +241,7 @@ Host reposh
   console.log('Added to ~/.ssh/config:');
   console.log(block.trim());
   console.log('\nUsage: ssh <org/repo>@reposh [command]');
-  console.log('Example: ssh supabase/supabase@reposh ls');
+  console.log('Example: ssh facebook/react@reposh ls');
 }
 
 // Creates a duplex stream over stdin/stdout for use as a ProxyCommand.

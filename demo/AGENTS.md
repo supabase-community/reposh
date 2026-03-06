@@ -8,16 +8,16 @@ Examples:
 
 ```bash
 # List files
-ssh supabase/supabase@reposh ls
+ssh facebook/react@reposh ls
 
 # Read a file
-ssh supabase/supabase@reposh cat README.md
+ssh facebook/react@reposh cat README.md
 
 # Search across the repo
-ssh supabase/supabase@reposh "grep -r 'createClient' src/ | head -20"
+ssh facebook/react@reposh "grep -r 'useState' . --include='*.js' -l | head -20"
 
 # Find files by name
-ssh supabase/supabase@reposh "find . -name '*.ts' | head -20"
+ssh facebook/react@reposh "find . -name '*.ts' -not -path '*/__tests__/*' | head -20"
 
 # Explicit host for non-GitHub repos
 ssh gitlab.com/some-org/some-repo@reposh ls

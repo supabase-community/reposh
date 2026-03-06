@@ -8,7 +8,7 @@ Commands run inside [just-bash](https://github.com/vercel-labs/just-bash) - a sa
 
 ```bash
 npx reposh ssh install
-ssh supabase/supabase@reposh ls
+ssh facebook/react@reposh ls
 ```
 
 `ssh install` globally installs `reposh` and adds a `Host reposh` block to `~/.ssh/config`.
@@ -19,19 +19,19 @@ The SSH username encodes the repo: `org/repo` (assumes GitHub) or `host/org/repo
 
 ```bash
 # List files
-ssh supabase/supabase@reposh ls
+ssh facebook/react@reposh ls
 
 # Search across the repo
-ssh supabase/supabase@reposh "grep -r 'vector' src/"
+ssh facebook/react@reposh "grep -r 'useState' src/"
 
 # Read a file
-ssh supabase/supabase@reposh cat README.md
+ssh facebook/react@reposh cat README.md
 
 # Pipe commands (always quote to prevent local shell expansion)
-ssh supabase/supabase@reposh "find . -name '*.ts' | head -20"
+ssh facebook/react@reposh "find . -name '*.ts' | head -20"
 
 # Interactive shell
-ssh supabase/supabase@reposh
+ssh facebook/react@reposh
 
 # Explicit git host (GitLab, etc.)
 ssh gitlab.com/some-org/some-repo@reposh ls
@@ -40,7 +40,7 @@ ssh gitlab.com/some-org/some-repo@reposh ls
 Or use the CLI directly:
 
 ```bash
-npx reposh supabase/supabase ls
+npx reposh facebook/react ls
 ```
 
 ## Self-hosting
