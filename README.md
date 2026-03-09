@@ -114,6 +114,10 @@ reposh cache facebook/react vercel/next.js
 
 This clones the repos ahead of time. If network is unavailable when the cache goes stale, reposh falls back to the stale copy rather than failing - so pre-cached repos keep working indefinitely without `allowedDomains`.
 
+## Windows
+
+reposh works on Windows as long as [Git](https://git-scm.com/download/win) is installed and on your `PATH`. Cache location (`~/.reposh/cache/`) resolves to `C:\Users\<you>\.reposh\cache\` automatically.
+
 ## Agent skill
 
 reposh ships with an [agent skill](https://github.com/vercel-labs/skills) that teaches your agent when and how to use reposh. Install it with:
