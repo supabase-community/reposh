@@ -8,11 +8,32 @@ import { makeSSHServer, makeStdioDuplex, sshInstall } from './ssh.js';
 const [,, cmd, ...args] = process.argv;
 
 if (!cmd) {
-  console.error('Usage:\n  reposh <org/repo> [command...]\n  reposh ssh install\n  reposh ssh serve\n  reposh ssh proxy');
+  console.error('Usage:\n  reposh <repo> [command...]\n  reposh cache <repo> [...]\n  reposh ssh install\n  reposh ssh serve\n  reposh ssh proxy\n\n  <repo> is org/repo (defaults to GitHub) or host/org/repo');
   process.exit(1);
 }
 
-if (cmd === 'ssh') {
+if (cmd === 'cache') {
+  if (args.length === 0) {
+    console.error('Usage: reposh cache <repo> [...]');
+    process.exit(1);
+  }
+  for (const arg of args) {
+    const target = parseRepoTarget(arg);
+    if (!target) {
+      console.error(`Invalid repo: ${arg}`);
+      process.exit(1);
+    }
+    const onProgress = makeProgressWriter((msg) => process.stderr.write(msg), process.stdin.isTTY ?? false);
+    try {
+      await ensureRepo(target, onProgress);
+      console.error(`Cached ${target.org}/${target.repo}`);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  }
+
+} else if (cmd === 'ssh') {
   const subcmd = args[0];
 
   if (subcmd === 'install') {

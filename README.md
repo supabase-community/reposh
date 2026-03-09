@@ -71,6 +71,47 @@ Why sandbox? Many agent harnesses generate their permission allowlists based on 
 
 It also means you don't need to worry about what's in the repos themselves. Commands are read-only and sandboxed, so there's no chance of accidentally running something destructive from an unfamiliar codebase.
 
+## Claude Code sandbox mode
+
+If you're running Claude Code with [sandbox mode](https://code.claude.com/docs/en/sandboxing) enabled, reposh needs two things that the sandbox restricts by default:
+
+1. **Network access** - reposh clones repos over HTTPS, so it needs to reach your git host
+2. **Filesystem writes outside CWD** - clones are cached in `~/.reposh/cache/`
+
+Add this to your `settings.json`:
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "allowWrite": ["~/.reposh"]
+    },
+    "allowedDomains": ["github.com"]
+  }
+}
+```
+
+If you're accessing repos on other hosts, add those too:
+
+```json
+{
+  "sandbox": {
+    "allowedDomains": ["github.com", "gitlab.com", "gitea.com"]
+  }
+}
+```
+
+**A note on `github.com`** - Claude Code's sandbox docs [discourage](https://code.claude.com/docs/en/sandboxing) broadly allowing `github.com` since it could be used for data exfiltration. reposh only needs it for read-only `git clone` and `git pull`, but the sandbox can't scope permissions to specific operations. This is the same tradeoff any git-based tool faces in sandbox mode.
+
+To avoid allowing `github.com` (or any other host) entirely, you can pre-cache repos before starting a sandboxed session:
+
+```bash
+reposh cache facebook/react vercel/next.js
+```
+
+This clones the repos ahead of time. If network is unavailable when the cache goes stale, reposh falls back to the stale copy rather than failing - so pre-cached repos keep working indefinitely without `allowedDomains`.
+
 ## Agent skill
 
 reposh ships with an [agent skill](https://github.com/vercel-labs/skills) that teaches your agent when and how to use reposh. Install it with:

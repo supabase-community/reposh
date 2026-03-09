@@ -89,6 +89,7 @@ export async function ensureRepo(
   const work = age === Infinity
     ? cloneRepo(target, dir, onProgress)                              // never cloned
     : pullRepo(dir).catch(() => cloneRepo(target, dir, onProgress))   // stale - pull, re-clone if pull fails
+        .catch(() => onProgress?.('Refresh failed, using stale cache\n'))  // both failed - serve stale
 
   locks.set(key, work.finally(() => locks.delete(key)))
   await locks.get(key)!
