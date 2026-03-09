@@ -1,34 +1,35 @@
-When you need to explore a codebase that is not cloned locally - to answer questions, trace code paths, or understand how something works - you can access any public GitHub repo over SSH without cloning it yourself:
+When you need to explore a codebase that is not cloned locally - to answer questions, trace code paths, or understand how something works - you can use reposh to run bash commands against any public repo:
 
 ```bash
-ssh <org>/<repo>@reposh <command>
+reposh <org>/<repo> <command>
 ```
 
 Examples:
 
 ```bash
 # List files
-ssh facebook/react@reposh ls
+reposh facebook/react ls
 
 # Read a file
-ssh facebook/react@reposh cat README.md
+reposh facebook/react cat README.md
 
 # Search across the repo
-ssh facebook/react@reposh "grep -r 'useState' . --include='*.js' -l | head -20"
+reposh facebook/react "grep -r 'useState' . --include='*.js' -l | head -20"
 
 # Find files by name
-ssh facebook/react@reposh "find . -name '*.ts' -not -path '*/__tests__/*' | head -20"
+reposh facebook/react "find . -name '*.ts' -not -path '*/__tests__/*' | head -20"
 
-# Explicit host for non-GitHub repos
-ssh gitlab.com/some-org/some-repo@reposh ls
+# Non-GitHub repos
+reposh gitlab.com/some-org/some-repo ls
 ```
 
 Always quote commands that contain pipes or special characters to prevent your local shell from interpreting them.
 
-The repo is fetched and cached on first access - subsequent calls to the same repo are fast. If the repo is not yet cached you will see cloning progress on stderr.
+The repo is fetched and cached on first access - subsequent calls to the same repo are fast.
 
 Use this when:
 
+- You want to understand why an error is occurring with a lib/tool/app. Reading the real source is the best way to debug.
 - A user asks about a library, framework, or tool you don't have full source knowledge of
 - You need to verify exact function signatures, types, or behavior
 - You need to trace how something is implemented rather than guessing from docs
