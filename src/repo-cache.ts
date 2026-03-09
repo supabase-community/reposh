@@ -1,4 +1,4 @@
-import { rm, mkdir, stat } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { spawn } from 'node:child_process'
 import type { RepoTarget } from './parse-target.js'
@@ -52,7 +52,6 @@ async function cloneRepo(
   dir: string,
   onProgress?: (msg: string) => void,
 ): Promise<void> {
-  await rm(dir, { recursive: true, force: true })
   await mkdir(dir, { recursive: true })
   onProgress?.(`Cloning ${target.org}/${target.repo}...\n`)
   await runGit(
@@ -62,8 +61,10 @@ async function cloneRepo(
   )
 }
 
-async function pullRepo(dir: string): Promise<void> {
-  await runGit(['pull', '--ff-only'], { cwd: dir })
+// Fetch + reset handles force pushes without needing to re-clone
+async function refreshRepo(dir: string): Promise<void> {
+  await runGit(['fetch', '--depth=1', 'origin'], { cwd: dir })
+  await runGit(['reset', '--hard', 'FETCH_HEAD'], { cwd: dir })
 }
 
 export async function ensureRepo(
@@ -87,9 +88,8 @@ export async function ensureRepo(
   if (age < CACHE_TTL_MS) return dir
 
   const work = age === Infinity
-    ? cloneRepo(target, dir, onProgress)                              // never cloned
-    : pullRepo(dir).catch(() => cloneRepo(target, dir, onProgress))   // stale - pull, re-clone if pull fails
-        .catch(() => onProgress?.('Refresh failed, using stale cache\n'))  // both failed - serve stale
+    ? cloneRepo(target, dir, onProgress)                                   // never cloned
+    : refreshRepo(dir).catch(() => onProgress?.('Refresh failed, using stale cache\n'))  // stale - fetch+reset, serve stale on failure
 
   locks.set(key, work.finally(() => locks.delete(key)))
   await locks.get(key)!

@@ -55,13 +55,15 @@ reposh gitlab.com/gitlab-org/gitlab cat README.md
 reposh gitea.com/some-org/some-repo ls
 ```
 
+Repos are always cloned over HTTPS - only public repos are supported.
+
 ## How it works
 
 On first access, a shallow clone (`depth=1`) is created at `~/.reposh/cache/<host>/<org>/<repo>/`. Every command after that runs against the local clone.
 
 Why clone? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase - listing files, grepping for patterns, reading specific modules. Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one.
 
-Clones are refreshed after 5 minutes of staleness. If a pull fails, it falls back to a fresh clone.
+Clones are refreshed after 5 minutes of staleness. If the refresh fails (e.g. network is down), it serves the stale cache.
 
 ### Sandboxing
 
@@ -102,7 +104,7 @@ If you're accessing repos on other hosts, add those too:
 }
 ```
 
-**A note on `github.com`** - Claude Code's sandbox docs [discourage](https://code.claude.com/docs/en/sandboxing) broadly allowing `github.com` since it could be used for data exfiltration. reposh only needs it for read-only `git clone` and `git pull`, but the sandbox can't scope permissions to specific operations. This is the same tradeoff any git-based tool faces in sandbox mode.
+**A note on `github.com`** - Claude Code's sandbox docs [discourage](https://code.claude.com/docs/en/sandboxing) broadly allowing `github.com` since it could be used for data exfiltration. reposh only needs it for read-only `git clone` and `git fetch`, but the sandbox can't scope permissions to specific operations. This is the same tradeoff any git-based tool faces in sandbox mode.
 
 To avoid allowing `github.com` (or any other host) entirely, you can pre-cache repos before starting a sandboxed session:
 
