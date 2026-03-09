@@ -4,14 +4,11 @@
 
 reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this instead of manual clones or fragile web fetches.
 
-```bash
-npm i -g reposh
+Your agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if the repo were local:
 
-# Your agent (e.g. claude code) runs:
+```bash
 reposh facebook/react grep -r 'useState' src/
 ```
-
-Your agent just needs to prefix their bash command with `reposh <org>/<repo>` and the rest works as if the repo were local.
 
 ## Why?
 
@@ -24,6 +21,20 @@ reposh vercel/next.js cat package.json
 reposh torvalds/linux "find . -name '*.h' | xargs grep -l 'spinlock'"
 reposh stripe/stripe-node ls src/resources/
 ```
+
+## Setup
+
+1. Install `reposh`:
+
+   ```bash
+   npm install -g reposh
+   ```
+
+2. Teach your agent to use it with the [reposh agent skill](#agent-skill):
+
+   ```bash
+   npx skills add rabbitholehq/reposh
+   ```
 
 ## Usage
 
@@ -59,6 +70,16 @@ Commands run inside [just-bash](https://github.com/vercel-labs/just-bash) - a Ty
 Why sandbox? Many agent harnesses generate their permission allowlists based on the top-level command. Sandboxing means you can allowlist `reposh` once and trust that any shell command the agent runs is limited to the virtual commands built-in to the just-bash emulator and scoped to the specified repo.
 
 It also means you don't need to worry about what's in the repos themselves. Commands are read-only and sandboxed, so there's no chance of accidentally running something destructive from an unfamiliar codebase.
+
+## Agent skill
+
+reposh ships with an [agent skill](https://github.com/vercel-labs/skills) that teaches your agent when and how to use reposh. Install it with:
+
+```bash
+npx skills add rabbitholehq/reposh
+```
+
+This works across Claude Code, Cursor, Codex, and [37+ other agents](https://github.com/vercel-labs/skills#supported-agents). Once installed, your agent will automatically reach for reposh when it needs to explore an external codebase - no prompting required.
 
 ## License
 
