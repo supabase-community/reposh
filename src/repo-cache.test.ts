@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { resolve } from 'node:path'
 import { spawn as realSpawn } from 'node:child_process'
 import type { RepoTarget } from './parse-target.js'
 
@@ -17,6 +18,8 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('./paths.js', () => ({
   CACHE_DIR: '/tmp/reposh-test-cache',
 }))
+
+const expectedDir = resolve('/tmp/reposh-test-cache', 'github.com', 'facebook', 'react')
 
 import { ensureRepo } from './repo-cache.js'
 import { spawn } from 'node:child_process'
@@ -55,7 +58,7 @@ describe('ensureRepo', () => {
 
     const dir = await ensureRepo(target)
 
-    expect(dir).toBe('/tmp/reposh-test-cache/github.com/facebook/react')
+    expect(dir).toBe(expectedDir)
     expect(mockSpawn).toHaveBeenCalledWith(
       'git',
       ['clone', '--depth=1', '--single-branch', 'https://github.com/facebook/react', dir],
@@ -68,7 +71,7 @@ describe('ensureRepo', () => {
 
     const dir = await ensureRepo(target)
 
-    expect(dir).toBe('/tmp/reposh-test-cache/github.com/facebook/react')
+    expect(dir).toBe(expectedDir)
     expect(mockSpawn).not.toHaveBeenCalled()
   })
 
@@ -78,7 +81,7 @@ describe('ensureRepo', () => {
 
     const dir = await ensureRepo(target)
 
-    expect(dir).toBe('/tmp/reposh-test-cache/github.com/facebook/react')
+    expect(dir).toBe(expectedDir)
     expect(mockSpawn).toHaveBeenCalledWith(
       'git',
       ['fetch', '--depth=1', 'origin'],
@@ -98,7 +101,7 @@ describe('ensureRepo', () => {
     const messages: string[] = []
     const dir = await ensureRepo(target, (msg) => messages.push(msg))
 
-    expect(dir).toBe('/tmp/reposh-test-cache/github.com/facebook/react')
+    expect(dir).toBe(expectedDir)
     expect(messages).toContain('Refresh failed, using stale cache\n')
   })
 

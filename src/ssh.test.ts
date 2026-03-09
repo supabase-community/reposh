@@ -42,7 +42,7 @@ describe('loadOrCreateHostKey', () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining('Loaded host key'))
   })
 
-  it('sets restrictive file permissions on generated key', () => {
+  it.skipIf(process.platform === 'win32')('sets restrictive file permissions on generated key', () => {
     const mode = statSync(testKeyPath).mode & 0o777
     expect(mode).toBe(0o600)
   })

@@ -116,7 +116,7 @@ This clones the repos ahead of time. If network is unavailable when the cache go
 
 ## Windows
 
-reposh works on Windows as long as [Git](https://git-scm.com/download/win) is installed and on your `PATH`. Cache location (`~/.reposh/cache/`) resolves to `C:\Users\<you>\.reposh\cache\` automatically.
+Windows is not currently supported. The [just-bash](https://github.com/vercel-labs/just-bash) sandboxed shell has a path separator bug in its `OverlayFs` that prevents file reads on Windows (directory listings work, but `cat`, `head`, etc. fail). We're working on a fix upstream.
 
 ## Agent skill
 
