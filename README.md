@@ -2,7 +2,7 @@
 
 > Bash into any public repo
 
-reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this instead of manual clones or fragile web fetches.
+reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this with your LLM instead of manual clones or fragile web fetches.
 
 Your agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if the repo were local:
 
