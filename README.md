@@ -120,13 +120,13 @@ reposh works on Windows as long as [Git](https://git-scm.com/download/win) is in
 
 ## Agent skill
 
-reposh ships with an [agent skill](https://github.com/vercel-labs/skills) that teaches your agent when and how to use reposh. Install it with:
+reposh ships with an [agent skill](https://agentskills.io/home) that teaches your agent when and how to use reposh. Install it with:
 
 ```bash
 npx skills add rabbitholehq/reposh
 ```
 
-This works across Claude Code, Cursor, Codex, and [37+ other agents](https://github.com/vercel-labs/skills#supported-agents). Once installed, your agent will automatically reach for reposh when it needs to explore an external codebase - no prompting required.
+This works across Claude Code, Cursor, Codex, and [37+ other agents](https://github.com/vercel-labs/skills#supported-agents). Once installed, your agent will automatically reach for reposh when it needs to explore an external codebase.
 
 ## License
 
