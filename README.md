@@ -42,6 +42,20 @@ reposh stripe/stripe-node ls src/resources/
 reposh <org>/<repo> <bash command>
 ```
 
+### Specific branches or tags
+
+Append `:ref` to target a specific branch or tag:
+
+```bash
+reposh facebook/react:v18.2.0 cat package.json
+reposh vercel/next.js:canary ls src/
+reposh gitlab.com/org/project:main ls
+```
+
+Without `:ref`, reposh uses the repository's default branch.
+
+### Non-GitHub repos
+
 Defaults to GitHub. For repos on other hosts, just include the hostname:
 
 ```bash
@@ -59,7 +73,7 @@ Repos are always accessed over HTTPS.
 
 ## How it works
 
-On first access, a shallow clone (`depth=1`) is created at `~/.reposh/cache/<host>/<org>/<repo>/`. Every command after that runs against the local clone.
+On first access, a shallow clone (`depth=1`) is created at `~/.reposh/cache/<host>/<org>/<repo>/`. Every command after that runs against the local clone. When you request a specific branch or tag, reposh uses git worktrees to share the object store with the main clone - so only new/different objects are fetched.
 
 Why clone? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase (listing files, grepping for patterns, reading modules). Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one. The tradeoff is a one-time delay on first access while the repo clones, but every command after that runs at local speed.
 
@@ -122,13 +136,14 @@ You can also list, inspect, and clean up cached repos:
 
 ```bash
 reposh cache ls                     # list cached repos with sizes
-reposh cache rm facebook/react      # remove a specific repo
+reposh cache rm facebook/react      # remove a repo and its worktrees
+reposh cache rm facebook/react:v18  # remove a single worktree
 reposh cache rm --all               # clear the entire cache
 ```
 
 ## Windows
 
-Windows is not currently supported. The [just-bash](https://github.com/vercel-labs/just-bash) sandboxed shell has a path separator bug in its `OverlayFs` that prevents file reads on Windows (directory listings work, but `cat`, `head`, etc. fail). We're working on a fix upstream!
+Windows is not currently supported, but it's on the roadmap. The [just-bash](https://github.com/vercel-labs/just-bash) sandboxed shell has a path separator bug in its `OverlayFs` that prevents file reads on Windows (directory listings work, but `cat`, `head`, etc. fail). We're working on a fix upstream!
 
 ## Agent skill
 

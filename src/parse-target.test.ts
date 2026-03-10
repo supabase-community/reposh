@@ -77,4 +77,76 @@ describe('parseRepoTarget', () => {
   it('rejects host with single-char TLD', () => {
     expect(parseRepoTarget('example.c/org/repo')).toBeUndefined()
   })
+
+  // --- ref parsing ---
+
+  it('parses org/repo:ref with branch', () => {
+    expect(parseRepoTarget('facebook/react:main')).toEqual({
+      host: 'github.com', org: 'facebook', repo: 'react', ref: 'main',
+    })
+  })
+
+  it('parses org/repo:ref with tag', () => {
+    expect(parseRepoTarget('facebook/react:v18.2.0')).toEqual({
+      host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0',
+    })
+  })
+
+  it('parses host/org/repo:ref', () => {
+    expect(parseRepoTarget('gitlab.com/user/project:develop')).toEqual({
+      host: 'gitlab.com', org: 'user', repo: 'project', ref: 'develop',
+    })
+  })
+
+  it('parses ref with slashes (feature branches)', () => {
+    expect(parseRepoTarget('facebook/react:feature/hooks')).toEqual({
+      host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks',
+    })
+  })
+
+  it('parses ref with dots and hyphens', () => {
+    expect(parseRepoTarget('org/repo:release-1.0.0')).toEqual({
+      host: 'github.com', org: 'org', repo: 'repo', ref: 'release-1.0.0',
+    })
+  })
+
+  it('parses single-char ref', () => {
+    expect(parseRepoTarget('org/repo:v')).toEqual({
+      host: 'github.com', org: 'org', repo: 'repo', ref: 'v',
+    })
+  })
+
+  it('returns no ref field when no colon', () => {
+    const result = parseRepoTarget('facebook/react')
+    expect(result).toEqual({ host: 'github.com', org: 'facebook', repo: 'react' })
+    expect(result?.ref).toBeUndefined()
+  })
+
+  it('rejects empty ref after colon', () => {
+    expect(parseRepoTarget('org/repo:')).toBeUndefined()
+  })
+
+  it('rejects ref with path traversal (..)', () => {
+    expect(parseRepoTarget('org/repo:../evil')).toBeUndefined()
+  })
+
+  it('rejects ref ending with .lock', () => {
+    expect(parseRepoTarget('org/repo:branch.lock')).toBeUndefined()
+  })
+
+  it('rejects ref with spaces', () => {
+    expect(parseRepoTarget('org/repo:my branch')).toBeUndefined()
+  })
+
+  it('rejects ref starting with dash', () => {
+    expect(parseRepoTarget('org/repo:-flag')).toBeUndefined()
+  })
+
+  it('rejects ref with double slashes', () => {
+    expect(parseRepoTarget('org/repo:feature//bad')).toBeUndefined()
+  })
+
+  it('rejects ref ending with slash', () => {
+    expect(parseRepoTarget('org/repo:feature/')).toBeUndefined()
+  })
 })

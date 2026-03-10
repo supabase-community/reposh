@@ -15,6 +15,21 @@ describe('makePrefix', () => {
     const target: RepoTarget = { host: 'gitlab.com', org: 'user', repo: 'project' }
     expect(makePrefix(target)).toBe('/repos/gitlab.com/user/project')
   })
+
+  it('includes ref in prefix when specified', () => {
+    const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0' }
+    expect(makePrefix(target)).toBe('/repos/github.com/facebook/react@v18.2.0')
+  })
+
+  it('includes ref with slashes in prefix', () => {
+    const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks' }
+    expect(makePrefix(target)).toBe('/repos/github.com/facebook/react@feature/hooks')
+  })
+
+  it('omits ref from prefix when not specified', () => {
+    const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react' }
+    expect(makePrefix(target)).toBe('/repos/github.com/facebook/react')
+  })
 })
 
 describe('makeProgressWriter', () => {

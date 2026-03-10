@@ -14,7 +14,7 @@ import type {
   ServerChannel,
   ExecInfo,
 } from 'ssh2';
-import { parseRepoTarget } from './parse-target.js';
+import { parseRepoTarget, repoLabel } from './parse-target.js';
 import { ensureRepo } from './repo-cache.js';
 import {
   makeBash,
@@ -73,7 +73,7 @@ function handleConnection(client: Connection, log: Log): void {
           ? ensureRepo(target, onProgress)
           : Promise.reject(
               new Error(
-                'Usage: ssh <org>/<repo>@<host> [command]\nExample: ssh facebook/react@reposh ls',
+                'Usage: ssh <org>/<repo>[:ref]@<host> [command]\nExample: ssh facebook/react@reposh ls\nExample: ssh facebook/react:v18.2.0@reposh cat package.json',
               ),
             );
 
@@ -138,7 +138,7 @@ function handleConnection(client: Connection, log: Log): void {
         }
 
         const bash = makeBash(repoDir, prefix);
-        const label = target ? `${target.org}/${target.repo}` : 'repo';
+        const label = target ? repoLabel(target) : 'repo';
         channel.write(`${label} shell. Type commands to browse.\r\n$ `);
 
         let buf = '';
@@ -240,8 +240,9 @@ Host reposh
   await writeFile(configPath, existing + block, { mode: 0o600 });
   console.log('Added to ~/.ssh/config:');
   console.log(block.trim());
-  console.log('\nUsage: ssh <org/repo>@reposh [command]');
+  console.log('\nUsage: ssh <org/repo[:ref]>@reposh [command]');
   console.log('Example: ssh facebook/react@reposh ls');
+  console.log('Example: ssh facebook/react:v18.2.0@reposh cat package.json');
 }
 
 // Creates a duplex stream over stdin/stdout for use as a ProxyCommand.

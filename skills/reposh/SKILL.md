@@ -39,6 +39,25 @@ reposh vercel/next.js "grep -rl 'middleware' src/ | head -10"
 
 Always quote commands containing pipes or special characters to prevent the local shell from interpreting them.
 
+## Browsing a specific version
+
+Append `:ref` to target a specific branch or tag:
+
+```bash
+reposh <org>/<repo>:<tag-or-branch> <command>
+```
+
+This is especially useful when investigating dependencies. Check what version the user has installed (in package.json, pyproject.toml, Cargo.toml, go.mod, etc.), then explore that exact version's source:
+
+```bash
+# Check the user's installed version first, then explore it
+reposh stripe/stripe-node:v17.4.0 cat src/resources/Customers.ts
+reposh vercel/next.js:canary ls src/
+reposh pallets/flask:3.1.1 cat src/flask/app.py
+```
+
+Without `:ref`, reposh uses the repository's default branch - which may have unreleased changes that don't match the version the user has installed. Tags typically follow the project's release naming convention (v1.0.0, 1.0.0, etc.) - check the repo's releases or tags if unsure.
+
 ## Non-GitHub repos
 
 Include the hostname for repos hosted elsewhere:
@@ -50,6 +69,7 @@ reposh gitea.com/some-org/some-repo ls
 
 ## When to use reposh
 
+- Investigating a specific version of a dependency the user has installed
 - Debugging errors from a library - reading the actual source beats guessing from docs
 - Verifying exact function signatures, types, or behavior
 - Tracing how something is implemented end-to-end

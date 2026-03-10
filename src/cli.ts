@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline'
 import { Command } from 'commander'
-import { parseRepoTarget } from './parse-target.js'
+import { parseRepoTarget, repoLabel } from './parse-target.js'
 import { ensureRepo } from './repo-cache.js'
 import { makeBash, makePrefix, makeProgressWriter, execCommand } from './run-command.js'
 import { makeSSHServer, makeStdioDuplex, sshInstall } from './ssh.js'
@@ -21,7 +21,7 @@ const cache = program.command('cache').description('Manage the repo cache')
 
 cache.command('add')
   .description('Pre-cache one or more repos')
-  .argument('<repos...>', 'org/repo or host/org/repo')
+  .argument('<repos...>', 'org/repo[:ref] or host/org/repo[:ref]')
   .action(async (repos: string[]) => {
     for (const arg of repos) {
       const target = parseRepoTarget(arg)
@@ -32,7 +32,7 @@ cache.command('add')
       const onProgress = makeProgressWriter((msg) => process.stderr.write(msg), process.stdin.isTTY ?? false)
       try {
         await ensureRepo(target, onProgress)
-        console.error(`Cached ${target.org}/${target.repo}`)
+        console.error(`Cached ${repoLabel(target)}`)
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err))
         process.exit(1)
@@ -48,11 +48,12 @@ cache.command('ls')
 
 cache.command('rm')
   .description('Remove a cached repo, or --all to clear the entire cache')
-  .argument('[repo]', 'org/repo or host/org/repo')
+  .argument('[repo]', 'org/repo[:ref] or host/org/repo[:ref]')
   .option('--all', 'Remove all cached repos')
-  .action(async (repo: string | undefined, opts: { all?: boolean }) => {
+  .option('-y, --yes', 'Skip confirmation')
+  .action(async (repo: string | undefined, opts: { all?: boolean; yes?: boolean }) => {
     try {
-      await cacheRm(repo, opts.all)
+      await cacheRm({ repo, all: opts.all, skipConfirm: opts.yes })
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err))
       process.exit(1)
@@ -76,7 +77,7 @@ ssh.command('serve')
     const PORT = parseInt(process.env.PORT ?? '22', 10)
     server.listen(PORT, '0.0.0.0', () => {
       console.error(`SSH server listening on port ${PORT}`)
-      console.error(`Connect: ssh <org>/<repo>@localhost`)
+      console.error(`Connect: ssh <org>/<repo>[:ref]@localhost`)
     })
     process.on('SIGTERM', () => { console.error('SIGTERM'); process.exit(0) })
     process.on('SIGINT', () => { console.error('SIGINT'); process.exit(0) })
@@ -92,7 +93,7 @@ ssh.command('proxy')
 // --- default: reposh <repo> [command...] ---
 
 program
-  .argument('[repo]', 'org/repo or host/org/repo')
+  .argument('[repo]', 'org/repo[:ref] or host/org/repo[:ref]')
   .argument('[command...]', 'Command to run in the repo')
   .action(async (repo: string | undefined, command: string[]) => {
     if (!repo) {
@@ -130,9 +131,8 @@ program
         process.exit(1)
       }
     } else {
-      const label = `${target.org}/${target.repo}`
       const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: '$ ', terminal: isInteractive })
-      process.stdout.write(`${label} shell. Type commands to browse.\n`)
+      process.stdout.write(`${repoLabel(target)} shell. Type commands to browse.\n`)
       rl.prompt()
 
       rl.on('line', async (line) => {

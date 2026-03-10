@@ -130,3 +130,132 @@ describe('ensureRepo', () => {
     expect(messages).toContain('Cloning facebook/react...\n')
   })
 })
+
+describe('ensureRepo with ref (worktrees)', () => {
+  const targetWithRef: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0' }
+  const expectedWtDir = resolve('/tmp/reposh-test-cache', 'github.com', 'facebook', 'react@v18.2.0')
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('clones main repo then creates worktree for ref', async () => {
+    mockStat.mockRejectedValue(new Error('ENOENT'))
+    mockSpawn.mockReturnValue(fakeProc(0))
+
+    const dir = await ensureRepo(targetWithRef)
+
+    expect(dir).toBe(expectedWtDir)
+    // Should clone main repo first
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'git',
+      ['clone', '--depth=1', '--single-branch', 'https://github.com/facebook/react', expectedDir],
+      expect.any(Object),
+    )
+    // Then fetch the ref
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'git',
+      ['fetch', '--depth=1', 'origin', 'v18.2.0'],
+      expect.any(Object),
+    )
+    // Then add worktree
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'git',
+      ['worktree', 'add', expectedWtDir, 'FETCH_HEAD', '--detach'],
+      expect.any(Object),
+    )
+  })
+
+  it('encodes slashes in ref for worktree dir name', async () => {
+    const slashRef: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks' }
+    const expectedSlashDir = resolve('/tmp/reposh-test-cache', 'github.com', 'facebook', 'react@feature--hooks')
+
+    mockStat.mockRejectedValue(new Error('ENOENT'))
+    mockSpawn.mockReturnValue(fakeProc(0))
+
+    const dir = await ensureRepo(slashRef)
+
+    expect(dir).toBe(expectedSlashDir)
+  })
+
+  it('re-fetches and checks out stale worktree', async () => {
+    // Worktree .git file exists but is stale (10 min old)
+    // Main repo FETCH_HEAD is fresh (1 sec old)
+    let statCallCount = 0
+    mockStat.mockImplementation(async (p: any) => {
+      statCallCount++
+      const path = String(p)
+      if (path.includes('react@v18.2.0')) {
+        // worktreeAgeMs -> stale .git file
+        return { mtimeMs: Date.now() - 600_000 } as any
+      }
+      // ensureMainClone -> repoAgeMs checks FETCH_HEAD/HEAD, return fresh
+      return { mtimeMs: Date.now() - 1000 } as any
+    })
+    mockSpawn.mockReturnValue(fakeProc(0))
+
+    const dir = await ensureRepo(targetWithRef)
+
+    expect(dir).toBe(expectedWtDir)
+    // Should fetch the ref
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'git',
+      ['fetch', '--depth=1', 'origin', 'v18.2.0'],
+      expect.any(Object),
+    )
+    // Should checkout (not worktree add)
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'git',
+      ['-C', expectedWtDir, 'checkout', '--detach', 'FETCH_HEAD'],
+      expect.any(Object),
+    )
+    // Should NOT have called worktree add
+    const allArgs = mockSpawn.mock.calls.map(c => c[1])
+    expect(allArgs.some(a => a.includes('worktree'))).toBe(false)
+  })
+
+  it('returns fresh worktree without fetching', async () => {
+    mockStat.mockResolvedValue({ mtimeMs: Date.now() - 1000 } as any)
+
+    const dir = await ensureRepo(targetWithRef)
+
+    expect(dir).toBe(expectedWtDir)
+    expect(mockSpawn).not.toHaveBeenCalled()
+  })
+
+  it('throws descriptive error when ref not found', async () => {
+    const badRef: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'nonexistent-branch' }
+
+    // First stat call (worktree .git) -> ENOENT (no worktree yet)
+    // Second stat calls (main repo) -> ENOENT (no main clone yet)
+    mockStat.mockRejectedValue(new Error('ENOENT'))
+
+    // Clone succeeds, then fetch for the bad ref fails
+    let callCount = 0
+    mockSpawn.mockImplementation(() => {
+      callCount++
+      // First call is clone (succeeds), second is fetch (fails)
+      return fakeProc(callCount === 2 ? 1 : 0)
+    })
+
+    await expect(ensureRepo(badRef)).rejects.toThrow(
+      "Branch or tag 'nonexistent-branch' not found in facebook/react",
+    )
+  })
+
+  it('default branch uses original cache dir (no worktree)', async () => {
+    mockStat.mockRejectedValue(new Error('ENOENT'))
+    mockSpawn.mockReturnValue(fakeProc(0))
+
+    const dir = await ensureRepo(target)
+
+    expect(dir).toBe(expectedDir)
+    // Should not use worktree commands
+    const allArgs = mockSpawn.mock.calls.map(c => c[1])
+    expect(allArgs.some(a => a.includes('worktree'))).toBe(false)
+  })
+})

@@ -8,7 +8,8 @@ export const aliasCommands = [
 ];
 
 export function makePrefix(target: RepoTarget): string {
-  return `/repos/${target.host}/${target.org}/${target.repo}`;
+  const base = `/repos/${target.host}/${target.org}/${target.repo}`;
+  return target.ref ? `${base}@${target.ref}` : base;
 }
 
 export function makeBash(repoDir: string, prefix: string): Bash {
