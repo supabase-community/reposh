@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline'
-import { readdir, stat, rm } from 'node:fs/promises'
+import { readdir, stat, lstat, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { CACHE_DIR } from './paths.js'
@@ -23,7 +23,7 @@ async function dirSize(dir: string): Promise<number> {
     if (entry.isDirectory()) {
       total += await dirSize(full)
     } else {
-      total += (await stat(full)).size
+      total += (await lstat(full)).size
     }
   }
   return total

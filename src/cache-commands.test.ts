@@ -4,6 +4,7 @@ import { join } from 'node:path'
 vi.mock('node:fs/promises', () => ({
   readdir: vi.fn(),
   stat: vi.fn(),
+  lstat: vi.fn(),
   rm: vi.fn(async () => {}),
 }))
 
@@ -16,11 +17,12 @@ vi.mock('./paths.js', () => ({
 }))
 
 import { cacheLs, cacheRm, findCachedRepos, formatSize } from './cache-commands.js'
-import { readdir, stat, rm } from 'node:fs/promises'
+import { readdir, stat, lstat, rm } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 
 const mockReaddir = vi.mocked(readdir)
 const mockStat = vi.mocked(stat)
+const mockLstat = vi.mocked(lstat)
 const mockRm = vi.mocked(rm)
 const mockSpawn = vi.mocked(spawn)
 
@@ -96,7 +98,7 @@ describe('findCachedRepos', () => {
 
     // dirSize walk for react
     mockReaddir.mockResolvedValueOnce([dirEntry('file.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(1024))
+    mockLstat.mockResolvedValueOnce(fileStat(1024))
 
     const repos = await findCachedRepos()
     expect(repos).toEqual([{
@@ -117,11 +119,11 @@ describe('findCachedRepos', () => {
     // react dir
     mockStat.mockResolvedValueOnce(dirStat())
     mockReaddir.mockResolvedValueOnce([dirEntry('f.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(1024))
+    mockLstat.mockResolvedValueOnce(fileStat(1024))
     // react@v18.2.0 dir
     mockStat.mockResolvedValueOnce(dirStat())
     mockReaddir.mockResolvedValueOnce([dirEntry('f.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(512))
+    mockLstat.mockResolvedValueOnce(fileStat(512))
 
     const repos = await findCachedRepos()
     expect(repos).toEqual([
@@ -146,11 +148,33 @@ describe('findCachedRepos', () => {
     mockReaddir.mockResolvedValueOnce(['react@feature--hooks'] as any)
     mockStat.mockResolvedValueOnce(dirStat())
     mockReaddir.mockResolvedValueOnce([dirEntry('f.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(256))
+    mockLstat.mockResolvedValueOnce(fileStat(256))
 
     const repos = await findCachedRepos()
     expect(repos).toHaveLength(1)
     expect(repos[0].ref).toBe('feature/hooks')
+  })
+
+  it('handles broken symlinks gracefully via lstat', async () => {
+    mockReaddir.mockResolvedValueOnce(['github.com'] as any)
+    mockStat.mockResolvedValueOnce(dirStat())
+    mockReaddir.mockResolvedValueOnce(['someorg'] as any)
+    mockStat.mockResolvedValueOnce(dirStat())
+    mockReaddir.mockResolvedValueOnce(['somerepo'] as any)
+    mockStat.mockResolvedValueOnce(dirStat())
+
+    // dirSize walk: repo contains a regular file and a broken symlink
+    // lstat doesn't follow symlinks, so it returns the symlink's own size
+    mockReaddir.mockResolvedValueOnce([
+      dirEntry('file.txt', false),
+      dirEntry('AGENTS.md', false), // broken symlink
+    ] as any)
+    mockLstat.mockResolvedValueOnce(fileStat(1024)) // file.txt
+    mockLstat.mockResolvedValueOnce(fileStat(48)) // symlink itself (small)
+
+    const repos = await findCachedRepos()
+    expect(repos).toHaveLength(1)
+    expect(repos[0].sizeBytes).toBe(1072) // counts both entries
   })
 
   it('skips non-directory entries', async () => {
@@ -184,7 +208,7 @@ describe('cacheLs', () => {
     mockReaddir.mockResolvedValueOnce(['react'] as any)
     mockStat.mockResolvedValueOnce(dirStat())
     mockReaddir.mockResolvedValueOnce([dirEntry('file.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(2048))
+    mockLstat.mockResolvedValueOnce(fileStat(2048))
 
     await cacheLs()
     expect(console.log).toHaveBeenCalledWith('facebook/react  2.0 KB')
@@ -200,11 +224,11 @@ describe('cacheLs', () => {
     // react
     mockStat.mockResolvedValueOnce(dirStat())
     mockReaddir.mockResolvedValueOnce([dirEntry('f.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(2048))
+    mockLstat.mockResolvedValueOnce(fileStat(2048))
     // react@v18.2.0
     mockStat.mockResolvedValueOnce(dirStat())
     mockReaddir.mockResolvedValueOnce([dirEntry('f.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(1024))
+    mockLstat.mockResolvedValueOnce(fileStat(1024))
 
     await cacheLs()
 
@@ -235,7 +259,7 @@ describe('cacheRm', () => {
     mockReaddir.mockResolvedValueOnce(['react'] as any)
     mockStat.mockResolvedValueOnce(dirStat())
     mockReaddir.mockResolvedValueOnce([dirEntry('f.txt', false)] as any)
-    mockStat.mockResolvedValueOnce(fileStat(100))
+    mockLstat.mockResolvedValueOnce(fileStat(100))
 
     await cacheRm({ all: true, skipConfirm: true })
     expect(mockRm).toHaveBeenCalledWith(CACHE_DIR, { recursive: true, force: true })
