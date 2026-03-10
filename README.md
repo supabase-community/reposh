@@ -12,9 +12,9 @@ reposh facebook/react grep -r 'useState' src/
 
 ## Why?
 
-There's a lot of energy going into writing docs, skills, and rule files to help agents work with external tools and libraries. These have their place, but sometimes the best source of truth is - the source itself. Types, behavior, docs, examples - these are mostly already in the repo, and will always be up to date.
+There's a lot of energy going into writing docs, skills, and rule files to help agents work with external tools and libraries. These have their place, but sometimes the best source of truth is - the source itself. If you're looking for behavior, types, examples, or docs - most of that already lives in the repo, and it's always up to date.
 
-Agents are already great at navigating codebases, reposh just extends that to any public repo without any setup.
+Agents are great at navigating codebases, reposh just extends that to any public repo without any setup.
 
 ```bash
 reposh vercel/next.js cat package.json
