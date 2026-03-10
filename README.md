@@ -7,7 +7,7 @@ reposh lets agents explore any public repo the same way they explore your local 
 Your agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if the repo were local:
 
 ```bash
-reposh facebook/react grep -r 'useState' src/
+reposh colinhacks/zod grep -rl 'ZodError' packages/zod/src/
 ```
 
 ## Why?
@@ -17,9 +17,9 @@ There's a lot of energy going into writing docs, skills, and rule files to help 
 Agents are great at navigating codebases, reposh just extends that to any public repo without any setup.
 
 ```bash
-reposh vercel/next.js cat package.json
-reposh torvalds/linux "find . -name '*.h' | xargs grep -l 'spinlock'"
-reposh stripe/stripe-node ls src/resources/
+reposh colinhacks/zod cat packages/zod/src/index.ts
+reposh tailwindlabs/tailwindcss grep -rl 'theme' packages/tailwindcss/src/
+reposh supabase/supabase ls apps/
 ```
 
 ## Setup
