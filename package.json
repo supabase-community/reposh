@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "test:watch": "vitest --project unit"
+    "test:watch": "vitest --project unit",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "commander": "^14.0.3",
