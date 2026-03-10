@@ -7,6 +7,14 @@ description: This skill should be used when the user asks to "explore a repo", "
 
 Explore any public git repository using familiar bash commands without manually cloning it locally. Use `reposh` instead of WebFetch, web scraping, or manual clones when investigating external codebases.
 
+## Install
+
+reposh is likely already installed globally. If not:
+
+```bash
+npm install -g reposh
+```
+
 ## Usage
 
 ```bash
