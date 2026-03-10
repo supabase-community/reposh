@@ -63,7 +63,7 @@ On first access, a shallow clone (`depth=1`) is created at `~/.reposh/cache/<hos
 
 Why clone? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase (listing files, grepping for patterns, reading modules). Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one. The tradeoff is a one-time delay on first access while the repo clones, but every command after that runs at local speed.
 
-Clones are refreshed with a `git fetch` after 5 minutes of staleness. If the fetch fails (e.g. you're offline), it serves the stale cache. You can also [pre-cache repos](#pre-caching) ahead of time.
+Clones are refreshed with a `git fetch` after 5 minutes of staleness. If the fetch fails (e.g. you're offline), it serves the stale cache. You can also [pre-cache repos](#cache-management) ahead of time.
 
 ### Sandboxing
 
@@ -106,21 +106,29 @@ If you're accessing repos on other hosts, add those too:
 
 **A note on `github.com`** - Claude Code's sandbox docs [discourage](https://code.claude.com/docs/en/sandboxing) broadly allowing `github.com` since it could be used for data exfiltration. reposh only needs it for read-only `git clone` and `git fetch`, but the sandbox can't scope permissions to specific operations. This is the same tradeoff any git-based tool faces in sandbox mode.
 
-To avoid allowing `github.com` (or any other host) entirely, you can [pre-cache](#pre-caching) repos before starting a sandboxed session.
+To avoid allowing `github.com` (or any other host) entirely, you can [pre-cache](#cache-management) repos before starting a sandboxed session.
 
-## Pre-caching
+## Cache management
 
-To pre-cache a repo (e.g. if you want the repo to be available offline), run the `reposh cache` command:
+To pre-cache a repo (e.g. if you want the repo to be available offline):
 
 ```bash
-reposh cache facebook/react vercel/next.js
+reposh cache add facebook/react vercel/next.js
 ```
 
 This clones the repos ahead of time. If network is unavailable when the cache goes stale, reposh falls back to the stale copy.
 
+You can also list, inspect, and clean up cached repos:
+
+```bash
+reposh cache ls                     # list cached repos with sizes
+reposh cache rm facebook/react      # remove a specific repo
+reposh cache rm --all               # clear the entire cache
+```
+
 ## Windows
 
-Windows is not currently supported. The [just-bash](https://github.com/vercel-labs/just-bash) sandboxed shell has a path separator bug in its `OverlayFs` that prevents file reads on Windows (directory listings work, but `cat`, `head`, etc. fail). We're working on a fix upstream.
+Windows is not currently supported. The [just-bash](https://github.com/vercel-labs/just-bash) sandboxed shell has a path separator bug in its `OverlayFs` that prevents file reads on Windows (directory listings work, but `cat`, `head`, etc. fail). We're working on a fix upstream!
 
 ## Agent skill
 

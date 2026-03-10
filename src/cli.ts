@@ -1,112 +1,155 @@
 #!/usr/bin/env node
-import { createInterface } from 'node:readline';
-import { parseRepoTarget } from './parse-target.js';
-import { ensureRepo } from './repo-cache.js';
-import { makeBash, makePrefix, makeProgressWriter, execCommand } from './run-command.js';
-import { makeSSHServer, makeStdioDuplex, sshInstall } from './ssh.js';
+import { createInterface } from 'node:readline'
+import { Command } from 'commander'
+import { parseRepoTarget } from './parse-target.js'
+import { ensureRepo } from './repo-cache.js'
+import { makeBash, makePrefix, makeProgressWriter, execCommand } from './run-command.js'
+import { makeSSHServer, makeStdioDuplex, sshInstall } from './ssh.js'
+import { cacheLs, cacheRm } from './cache-commands.js'
+import pkg from '../package.json' with { type: 'json' }
 
-const [,, cmd, ...args] = process.argv;
+const program = new Command()
 
-if (!cmd) {
-  console.error('Usage:\n  reposh <repo> [command...]\n  reposh cache <repo> [...]\n  reposh ssh install\n  reposh ssh serve\n  reposh ssh proxy\n\n  <repo> is org/repo (defaults to GitHub) or host/org/repo');
-  process.exit(1);
-}
+program
+  .name('reposh')
+  .description('Run commands in cached git repos')
+  .version(pkg.version)
 
-if (cmd === 'cache') {
-  if (args.length === 0) {
-    console.error('Usage: reposh cache <repo> [...]');
-    process.exit(1);
-  }
-  for (const arg of args) {
-    const target = parseRepoTarget(arg);
-    if (!target) {
-      console.error(`Invalid repo: ${arg}`);
-      process.exit(1);
-    }
-    const onProgress = makeProgressWriter((msg) => process.stderr.write(msg), process.stdin.isTTY ?? false);
-    try {
-      await ensureRepo(target, onProgress);
-      console.error(`Cached ${target.org}/${target.repo}`);
-    } catch (err) {
-      console.error(err instanceof Error ? err.message : String(err));
-      process.exit(1);
-    }
-  }
+// --- cache ---
 
-} else if (cmd === 'ssh') {
-  const subcmd = args[0];
+const cache = program.command('cache').description('Manage the repo cache')
 
-  if (subcmd === 'install') {
-    await sshInstall();
-
-  } else if (subcmd === 'serve') {
-    const server = await makeSSHServer();
-    const PORT = parseInt(process.env.PORT ?? '22', 10);
-    server.listen(PORT, '0.0.0.0', () => {
-      console.error(`SSH server listening on port ${PORT}`);
-      console.error(`Connect: ssh <org>/<repo>@localhost`);
-    });
-    process.on('SIGTERM', () => { console.error('SIGTERM'); process.exit(0); });
-    process.on('SIGINT', () => { console.error('SIGINT'); process.exit(0); });
-
-  } else if (subcmd === 'proxy') {
-    const server = await makeSSHServer(() => {});
-    server._srv.emit('connection', makeStdioDuplex());
-
-  } else {
-    console.error(`Unknown subcommand: ${subcmd ?? '(none)'}\nUsage: reposh ssh <serve|proxy>`);
-    process.exit(1);
-  }
-
-} else {
-  const target = parseRepoTarget(cmd);
-  if (!target) {
-    console.error(`Invalid repo or unknown command: ${cmd}\nUsage: reposh <org/repo> [command...] or reposh ssh <serve|proxy>`);
-    process.exit(1);
-  }
-
-  const isInteractive = process.stdin.isTTY ?? false;
-  const onProgress = makeProgressWriter((msg) => process.stderr.write(msg), isInteractive);
-
-  let repoDir: string;
-  try {
-    repoDir = await ensureRepo(target, onProgress);
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
-  }
-
-  const prefix = makePrefix(target);
-  const bash = makeBash(repoDir, prefix);
-
-  if (args.length > 0) {
-    const command = args.join(' ');
-    try {
-      const code = await execCommand(bash, command, (s) => process.stdout.write(s), (s) => process.stderr.write(s));
-      process.exit(code);
-    } catch (err) {
-      console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(1);
-    }
-  } else {
-    const label = `${target.org}/${target.repo}`;
-    const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: '$ ', terminal: isInteractive });
-    process.stdout.write(`${label} shell. Type commands to browse.\n`);
-    rl.prompt();
-
-    rl.on('line', async (line) => {
-      const command = line.trim();
-      if (command === 'exit') { rl.close(); return; }
-      if (command) {
-        try {
-          await execCommand(bash, command, (s) => process.stdout.write(s), (s) => process.stderr.write(s));
-        } catch (err) {
-          process.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`);
-        }
+cache.command('add')
+  .description('Pre-cache one or more repos')
+  .argument('<repos...>', 'org/repo or host/org/repo')
+  .action(async (repos: string[]) => {
+    for (const arg of repos) {
+      const target = parseRepoTarget(arg)
+      if (!target) {
+        console.error(`Invalid repo: ${arg}`)
+        process.exit(1)
       }
-      rl.prompt();
-    });
+      const onProgress = makeProgressWriter((msg) => process.stderr.write(msg), process.stdin.isTTY ?? false)
+      try {
+        await ensureRepo(target, onProgress)
+        console.error(`Cached ${target.org}/${target.repo}`)
+      } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err))
+        process.exit(1)
+      }
+    }
+  })
 
-    rl.on('close', () => process.exit(0));
-  }
-}
+cache.command('ls')
+  .description('List cached repos with sizes')
+  .action(async () => {
+    await cacheLs()
+  })
+
+cache.command('rm')
+  .description('Remove a cached repo, or --all to clear the entire cache')
+  .argument('[repo]', 'org/repo or host/org/repo')
+  .option('--all', 'Remove all cached repos')
+  .action(async (repo: string | undefined, opts: { all?: boolean }) => {
+    try {
+      await cacheRm(repo, opts.all)
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err))
+      process.exit(1)
+    }
+  })
+
+// --- ssh ---
+
+const ssh = program.command('ssh').description('SSH server commands')
+
+ssh.command('install')
+  .description('Install reposh as an SSH subsystem')
+  .action(async () => {
+    await sshInstall()
+  })
+
+ssh.command('serve')
+  .description('Start the SSH server')
+  .action(async () => {
+    const server = await makeSSHServer()
+    const PORT = parseInt(process.env.PORT ?? '22', 10)
+    server.listen(PORT, '0.0.0.0', () => {
+      console.error(`SSH server listening on port ${PORT}`)
+      console.error(`Connect: ssh <org>/<repo>@localhost`)
+    })
+    process.on('SIGTERM', () => { console.error('SIGTERM'); process.exit(0) })
+    process.on('SIGINT', () => { console.error('SIGINT'); process.exit(0) })
+  })
+
+ssh.command('proxy')
+  .description('Run as SSH ProxyCommand')
+  .action(async () => {
+    const server = await makeSSHServer(() => {})
+    server._srv.emit('connection', makeStdioDuplex())
+  })
+
+// --- default: reposh <repo> [command...] ---
+
+program
+  .argument('[repo]', 'org/repo or host/org/repo')
+  .argument('[command...]', 'Command to run in the repo')
+  .action(async (repo: string | undefined, command: string[]) => {
+    if (!repo) {
+      program.help()
+      return
+    }
+
+    const target = parseRepoTarget(repo)
+    if (!target) {
+      console.error(`Invalid repo or unknown command: ${repo}`)
+      process.exit(1)
+    }
+
+    const isInteractive = process.stdin.isTTY ?? false
+    const onProgress = makeProgressWriter((msg) => process.stderr.write(msg), isInteractive)
+
+    let repoDir: string
+    try {
+      repoDir = await ensureRepo(target, onProgress)
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err))
+      process.exit(1)
+    }
+
+    const prefix = makePrefix(target)
+    const bash = makeBash(repoDir, prefix)
+
+    if (command.length > 0) {
+      const cmd = command.join(' ')
+      try {
+        const code = await execCommand(bash, cmd, (s) => process.stdout.write(s), (s) => process.stderr.write(s))
+        process.exit(code)
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : String(err)}`)
+        process.exit(1)
+      }
+    } else {
+      const label = `${target.org}/${target.repo}`
+      const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: '$ ', terminal: isInteractive })
+      process.stdout.write(`${label} shell. Type commands to browse.\n`)
+      rl.prompt()
+
+      rl.on('line', async (line) => {
+        const cmd = line.trim()
+        if (cmd === 'exit') { rl.close(); return }
+        if (cmd) {
+          try {
+            await execCommand(bash, cmd, (s) => process.stdout.write(s), (s) => process.stderr.write(s))
+          } catch (err) {
+            process.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`)
+          }
+        }
+        rl.prompt()
+      })
+
+      rl.on('close', () => process.exit(0))
+    }
+  })
+
+await program.parseAsync()
