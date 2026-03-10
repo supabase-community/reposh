@@ -109,7 +109,8 @@ async function ensureMainClone(
 
   const work = age === Infinity
     ? cloneRepo(baseTarget, dir, onProgress)
-    : refreshRepo(dir).catch(() => onProgress?.('Refresh failed, using stale cache\n'))
+    : (onProgress?.(`Refreshing ${baseTarget.org}/${baseTarget.repo}...\n`),
+      refreshRepo(dir).catch(() => onProgress?.('Refresh failed, using stale cache\n')))
 
   locks.set(key, work.finally(() => locks.delete(key)))
   await locks.get(key)!
@@ -152,6 +153,7 @@ async function ensureWorktree(
       await runGit(['worktree', 'add', wtDir, 'FETCH_HEAD', '--detach'], { cwd: mainDir })
     } else {
       // Stale worktree - update it
+      onProgress?.(`Refreshing ${label}...\n`)
       await runGit(['-C', wtDir, 'checkout', '--detach', 'FETCH_HEAD'], {})
     }
   })()
