@@ -2,7 +2,7 @@
 
 > Bash into any public repo
 
-reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this with your LLM instead of manual clones or fragile web fetches.
+reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this when you want to explore other codebases without manual clones or fragile web fetches.
 
 Your agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if the repo were local:
 
@@ -12,9 +12,9 @@ reposh facebook/react grep -r 'useState' src/
 
 ## Why?
 
-There's a lot of energy going into writing docs, skills, and rule files to help agents work with external tools and libraries. These have their place, but arguably the best source of truth is - the source itself. Types, behavior, docs, examples - these are all already in the repo, and are always up to date.
+There's a lot of energy going into writing docs, skills, and rule files to help agents work with external tools and libraries. These have their place, but sometimes the best source of truth is - the source itself. Types, behavior, docs, examples - these are mostly already in the repo, and will always be up to date.
 
-Agents are already great at navigating codebases, reposh just extends that to any public repo without any setup as if it were local.
+Agents are already great at navigating codebases, reposh just extends that to any public repo without any setup.
 
 ```bash
 reposh vercel/next.js cat package.json
@@ -30,7 +30,7 @@ reposh stripe/stripe-node ls src/resources/
    npm install -g reposh
    ```
 
-2. Teach your agent to use it with the [reposh agent skill](#agent-skill):
+2. Teach your agent to use it with the [agent skill](#agent-skill):
 
    ```bash
    npx skills add rabbitholehq/reposh
@@ -55,15 +55,15 @@ reposh gitlab.com/gitlab-org/gitlab cat README.md
 reposh gitea.com/some-org/some-repo ls
 ```
 
-Repos are always cloned over HTTPS - only public repos are supported.
+Repos are always accessed over HTTPS.
 
 ## How it works
 
 On first access, a shallow clone (`depth=1`) is created at `~/.reposh/cache/<host>/<org>/<repo>/`. Every command after that runs against the local clone.
 
-Why clone? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase - listing files, grepping for patterns, reading specific modules. Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one.
+Why clone? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase (listing files, grepping for patterns, reading modules). Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one. The tradeoff is a one-time delay on first access while the repo clones, but every command after that runs at local speed.
 
-Clones are refreshed after 5 minutes of staleness. If the refresh fails (e.g. network is down), it serves the stale cache.
+Clones are refreshed with a `git fetch` after 5 minutes of staleness. If the fetch fails (e.g. you're offline), it serves the stale cache. You can also [pre-cache repos](#pre-caching) ahead of time.
 
 ### Sandboxing
 
@@ -106,13 +106,17 @@ If you're accessing repos on other hosts, add those too:
 
 **A note on `github.com`** - Claude Code's sandbox docs [discourage](https://code.claude.com/docs/en/sandboxing) broadly allowing `github.com` since it could be used for data exfiltration. reposh only needs it for read-only `git clone` and `git fetch`, but the sandbox can't scope permissions to specific operations. This is the same tradeoff any git-based tool faces in sandbox mode.
 
-To avoid allowing `github.com` (or any other host) entirely, you can pre-cache repos before starting a sandboxed session:
+To avoid allowing `github.com` (or any other host) entirely, you can [pre-cache](#pre-caching) repos before starting a sandboxed session.
+
+## Pre-caching
+
+To pre-cache a repo (e.g. if you want the repo to be available offline), run the `reposh cache` command:
 
 ```bash
 reposh cache facebook/react vercel/next.js
 ```
 
-This clones the repos ahead of time. If network is unavailable when the cache goes stale, reposh falls back to the stale copy rather than failing - so pre-cached repos keep working indefinitely without `allowedDomains`.
+This clones the repos ahead of time. If network is unavailable when the cache goes stale, reposh falls back to the stale copy.
 
 ## Windows
 
