@@ -38,11 +38,13 @@ reposh stripe/stripe-node ls src/resources/
 
 ## Usage
 
-```bash
-reposh <org>/<repo> <bash command>
-```
+reposh is designed to be used by LLMs. Once you've [installed the skill](#agent-skill), your agent will know when and how to reach for it. If you prefer to build the prompt yourself, the skill source is in [SKILL.md](skills/reposh/SKILL.md).
 
-### Specific branches or tags
+You can also use it directly from the terminal:
+
+```bash
+reposh <org>/<repo>[:ref] <bash command>
+```
 
 Append `:ref` to target a specific branch or tag:
 
@@ -52,7 +54,7 @@ reposh vercel/next.js:canary ls src/
 reposh gitlab.com/org/project:main ls
 ```
 
-Without `:ref`, reposh uses the repository's default branch.
+Without `:ref`, reposh uses the repository's default branch. Commit hashes are not currently supported.
 
 ### Non-GitHub repos
 
