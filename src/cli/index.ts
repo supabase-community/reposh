@@ -1,17 +1,20 @@
 #!/usr/bin/env node
-import { createInterface } from 'node:readline';
 import { Command } from 'commander';
-import { parseRepoTarget, repoLabel } from './parse-target.js';
-import { ensureRepo } from './repo-cache.js';
+import { parseRepoTarget, formatRepoTarget } from '../parse-target.js';
+import { createRepoCache } from '../repo-cache.js';
+import { CACHE_DIR } from '../constants.js';
 import {
   makeBash,
   makePrefix,
   makeProgressWriter,
   execCommand,
+  startShell,
 } from './run-command.js';
 import { makeSSHServer, makeStdioDuplex, sshInstall } from './ssh.js';
-import { cacheLs, cacheRm } from './cache-commands.js';
-import pkg from '../package.json' with { type: 'json' };
+import { cacheLs, cacheRm } from './cache.js';
+import pkg from '../../package.json' with { type: 'json' };
+
+const repoCache = createRepoCache();
 
 const program = new Command();
 
@@ -43,8 +46,8 @@ cache
         process.stdin.isTTY ?? false,
       );
       try {
-        await ensureRepo(target, onProgress);
-        console.error(`Cached ${repoLabel(target)}`);
+        await repoCache.ensureRepo(target, { onProgress, force: true });
+        console.error(`Cached ${formatRepoTarget(target)}`);
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
@@ -56,7 +59,7 @@ cache
   .command('ls')
   .description('List cached repos with sizes')
   .action(async () => {
-    await cacheLs();
+    await cacheLs(CACHE_DIR);
   });
 
 cache
@@ -71,7 +74,7 @@ cache
       opts: { all?: boolean; yes?: boolean },
     ) => {
       try {
-        await cacheRm({ repo, all: opts.all, skipConfirm: opts.yes });
+        await cacheRm(CACHE_DIR, { repo, all: opts.all, skipConfirm: opts.yes });
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
@@ -147,7 +150,7 @@ program
 
     let repoDir: string;
     try {
-      repoDir = await ensureRepo(target, onProgress);
+      repoDir = await repoCache.ensureRepo(target, { onProgress });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -173,41 +176,13 @@ program
         process.exit(1);
       }
     } else {
-      const rl = createInterface({
+      startShell(bash, formatRepoTarget(target), {
         input: process.stdin,
         output: process.stdout,
-        prompt: '$ ',
-        terminal: isInteractive,
+        stderr: process.stderr,
+        isInteractive,
+        onClose: () => process.exit(0),
       });
-      process.stdout.write(
-        `${repoLabel(target)} shell. Type commands to browse.\n`,
-      );
-      rl.prompt();
-
-      rl.on('line', async (line) => {
-        const cmd = line.trim();
-        if (cmd === 'exit') {
-          rl.close();
-          return;
-        }
-        if (cmd) {
-          try {
-            await execCommand(
-              bash,
-              cmd,
-              (s) => process.stdout.write(s),
-              (s) => process.stderr.write(s),
-            );
-          } catch (err) {
-            process.stderr.write(
-              `Error: ${err instanceof Error ? err.message : String(err)}\n`,
-            );
-          }
-        }
-        rl.prompt();
-      });
-
-      rl.on('close', () => process.exit(0));
     }
   });
 

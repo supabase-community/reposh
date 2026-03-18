@@ -2,16 +2,24 @@
   "name": "reposh",
   "version": "0.1.0",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
-    "reposh": "./dist/cli.js"
+    "reposh": "./dist/cli/index.js"
   },
   "files": [
     "dist/"
   ],
   "scripts": {
     "build": "tsdown",
-    "start": "tsx src/cli.ts ssh serve",
-    "dev": "tsx watch src/cli.ts ssh serve",
+    "start": "tsx src/cli/index.ts ssh serve",
+    "dev": "tsx watch src/cli/index.ts ssh serve",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

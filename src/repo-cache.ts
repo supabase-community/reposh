@@ -1,31 +1,35 @@
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, stat, readdir, lstat, rm } from 'node:fs/promises'
 import { resolve, join, dirname } from 'node:path'
 import { spawn } from 'node:child_process'
-import { repoLabel } from './parse-target.js'
-import type { RepoTarget } from './parse-target.js'
-import { CACHE_DIR } from './paths.js'
-const CACHE_TTL_MS = parseInt(process.env.CACHE_TTL_MS ?? '300000', 10)
+import { resolveRepoTarget, formatRepoTarget } from './parse-target.js'
+import { checkAllowlist } from './allowlist.js'
+import { CACHE_DIR, CACHE_TTL } from './constants.js'
+import type { RepoTarget, RepoCacheConfig, CachedRepo, RepoCache } from './types.js'
 
-// Per-repo and per-ref locks to prevent concurrent clones/pulls
-const locks = new Map<string, Promise<void>>()
+// --- encoding ---
 
-function cacheKey(target: RepoTarget): string {
-  const base = `${target.host}/${target.org}/${target.repo}`
-  return target.ref ? `${base}@${target.ref}` : base
-}
-
-function repoDir(target: RepoTarget): string {
-  return resolve(CACHE_DIR, target.host, target.org, target.repo)
-}
-
-// Encode ref for use in filesystem directory name (/ -> --)
+// Encode ref for use in filesystem directory name (/ -> ~)
+// Uses ~ because it can't appear in validated refs (SAFE_REF)
 export function encodeRef(ref: string): string {
-  return ref.replace(/\//g, '--')
+  return ref.replace(/\//g, '~')
 }
 
-function worktreeDir(target: RepoTarget): string {
-  return resolve(CACHE_DIR, target.host, target.org, `${target.repo}@${encodeRef(target.ref!)}`)
+// Decode ref from filesystem directory name (~ -> /)
+function decodeRef(encoded: string): string {
+  return encoded.replace(/~/g, '/')
 }
+
+// --- path helpers ---
+
+function repoDirPath(cacheDir: string, target: RepoTarget): string {
+  return resolve(cacheDir, target.host, target.org, target.repo)
+}
+
+function worktreeDirPath(cacheDir: string, target: RepoTarget): string {
+  return resolve(cacheDir, target.host, target.org, `${target.repo}@${encodeRef(target.ref!)}`)
+}
+
+// --- age checks ---
 
 // Returns age in ms using FETCH_HEAD mtime (written on every pull),
 // falling back to HEAD. Returns Infinity if repo doesn't exist yet.
@@ -49,6 +53,8 @@ async function worktreeAgeMs(dir: string): Promise<number> {
   return Infinity
 }
 
+// --- git operations ---
+
 function runGit(
   args: string[],
   opts: { cwd?: string; onStderr?: (chunk: string) => void },
@@ -56,14 +62,22 @@ function runGit(
   return new Promise((resolve, reject) => {
     const proc = spawn('git', args, {
       cwd: opts.cwd,
-      stdio: ['ignore', 'ignore', opts.onStderr ? 'pipe' : 'ignore'],
+      stdio: ['ignore', 'ignore', 'pipe'],
     })
-    if (opts.onStderr) {
-      proc.stderr!.on('data', (chunk: Buffer) => opts.onStderr!(chunk.toString()))
-    }
-    proc.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`git ${args[0]} exited with code ${code}`)),
-    )
+    let stderrBuf = ''
+    proc.stderr!.on('data', (chunk: Buffer) => {
+      const text = chunk.toString()
+      stderrBuf += text
+      opts.onStderr?.(text)
+    })
+    proc.on('close', (code) => {
+      if (code === 0) return resolve()
+      const detail = stderrBuf.trim()
+      const msg = detail
+        ? `git ${args[0]} exited with code ${code}: ${detail}`
+        : `git ${args[0]} exited with code ${code}`
+      reject(new Error(msg))
+    })
     proc.on('error', reject)
   })
 }
@@ -91,84 +105,203 @@ async function refreshRepo(dir: string): Promise<void> {
 // Ensure the main clone (default branch) exists and is fresh
 async function ensureMainClone(
   target: RepoTarget,
+  cacheDir: string,
+  cacheTtl: number,
   onProgress?: (msg: string) => void,
 ): Promise<string> {
   const baseTarget: RepoTarget = { host: target.host, org: target.org, repo: target.repo }
-  const key = cacheKey(baseTarget)
-  const dir = repoDir(baseTarget)
-
-  const inflight = locks.get(key)
-  if (inflight) {
-    onProgress?.(`Waiting for in-progress clone of ${baseTarget.org}/${baseTarget.repo}...\n`)
-    await inflight
-    return dir
-  }
+  const dir = repoDirPath(cacheDir, baseTarget)
 
   const age = await repoAgeMs(dir)
-  if (age < CACHE_TTL_MS) return dir
+  if (age < cacheTtl) return dir
 
-  const work = age === Infinity
-    ? cloneRepo(baseTarget, dir, onProgress)
-    : (onProgress?.(`Refreshing ${baseTarget.org}/${baseTarget.repo}...\n`),
-      refreshRepo(dir).catch(() => onProgress?.('Refresh failed, using stale cache\n')))
+  if (age === Infinity) {
+    await cloneRepo(baseTarget, dir, onProgress)
+  } else {
+    onProgress?.(`Refreshing ${baseTarget.org}/${baseTarget.repo}...\n`)
+    await refreshRepo(dir).catch((err) => {
+      const detail = err instanceof Error ? err.message : String(err)
+      onProgress?.(`Refresh failed, using stale cache: ${detail}\n`)
+    })
+  }
 
-  locks.set(key, work.finally(() => locks.delete(key)))
-  await locks.get(key)!
   return dir
 }
 
 // Ensure a worktree exists for a specific ref
-async function ensureWorktree(
+async function ensureWorktreeDir(
   target: RepoTarget,
+  cacheDir: string,
+  cacheTtl: number,
   onProgress?: (msg: string) => void,
 ): Promise<string> {
-  const key = cacheKey(target)
-  const wtDir = worktreeDir(target)
-  const label = repoLabel(target)
-
-  const inflight = locks.get(key)
-  if (inflight) {
-    onProgress?.(`Waiting for in-progress setup of ${label}...\n`)
-    await inflight
-    return wtDir
-  }
+  const wtDir = worktreeDirPath(cacheDir, target)
+  const label = formatRepoTarget(target)
 
   const age = await worktreeAgeMs(wtDir)
-  if (age < CACHE_TTL_MS) return wtDir
+  if (age < cacheTtl) return wtDir
 
-  const work = (async () => {
-    // Ensure the main clone exists (we need its object store)
-    const mainDir = await ensureMainClone(target, onProgress)
+  // Ensure the main clone exists (we need its object store)
+  const mainDir = await ensureMainClone(target, cacheDir, cacheTtl, onProgress)
 
-    onProgress?.(`Fetching ${label}...\n`)
-    try {
-      await runGit(['fetch', '--depth=1', 'origin', target.ref!], { cwd: mainDir, onStderr: onProgress })
-    } catch {
-      throw new Error(`Branch or tag '${target.ref}' not found in ${target.org}/${target.repo}`)
-    }
+  onProgress?.(`Fetching ${label}...\n`)
+  try {
+    await runGit(['fetch', '--depth=1', 'origin', target.ref!], { cwd: mainDir, onStderr: onProgress })
+  } catch {
+    throw new Error(`Branch or tag '${target.ref}' not found in ${target.org}/${target.repo}`)
+  }
 
-    if (age === Infinity) {
-      // New worktree
-      await mkdir(dirname(wtDir), { recursive: true })
-      await runGit(['worktree', 'add', wtDir, 'FETCH_HEAD', '--detach'], { cwd: mainDir })
-    } else {
-      // Stale worktree - update it
-      onProgress?.(`Refreshing ${label}...\n`)
-      await runGit(['-C', wtDir, 'checkout', '--detach', 'FETCH_HEAD'], {})
-    }
-  })()
+  if (age === Infinity) {
+    // New worktree
+    await mkdir(dirname(wtDir), { recursive: true })
+    await runGit(['worktree', 'add', wtDir, 'FETCH_HEAD', '--detach'], { cwd: mainDir })
+  } else {
+    // Stale worktree - update it
+    onProgress?.(`Refreshing ${label}...\n`)
+    await runGit(['-C', wtDir, 'checkout', '--detach', 'FETCH_HEAD'], {})
+  }
 
-  locks.set(key, work.finally(() => locks.delete(key)))
-  await locks.get(key)!
   return wtDir
 }
 
-export async function ensureRepo(
+export function ensureRepo(
   target: RepoTarget,
+  config: { cacheDir: string; cacheTtl: number },
   onProgress?: (msg: string) => void,
 ): Promise<string> {
   if (target.ref) {
-    return ensureWorktree(target, onProgress)
+    return ensureWorktreeDir(target, config.cacheDir, config.cacheTtl, onProgress)
   }
-  return ensureMainClone(target, onProgress)
+  return ensureMainClone(target, config.cacheDir, config.cacheTtl, onProgress)
+}
+
+// --- cache listing ---
+
+async function dirSize(dir: string): Promise<number> {
+  let total = 0
+  const entries = await readdir(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      total += await dirSize(full)
+    } else {
+      total += (await lstat(full)).size
+    }
+  }
+  return total
+}
+
+export async function listCachedRepos(cacheDir: string): Promise<CachedRepo[]> {
+  const repos: CachedRepo[] = []
+  let hosts: string[]
+  try {
+    hosts = await readdir(cacheDir)
+  } catch {
+    return repos
+  }
+
+  for (const host of hosts) {
+    const hostDir = join(cacheDir, host)
+    if (!(await stat(hostDir).catch(() => null))?.isDirectory()) continue
+
+    const orgs = await readdir(hostDir)
+    for (const org of orgs) {
+      const orgDir = join(hostDir, org)
+      if (!(await stat(orgDir).catch(() => null))?.isDirectory()) continue
+
+      const dirNames = await readdir(orgDir)
+      for (const dirName of dirNames) {
+        const repoPath = join(orgDir, dirName)
+        if (!(await stat(repoPath).catch(() => null))?.isDirectory()) continue
+
+        const sizeBytes = await dirSize(repoPath)
+
+        // Parse @ref from directory name
+        const atIdx = dirName.indexOf('@')
+        if (atIdx !== -1) {
+          const repo = dirName.slice(0, atIdx)
+          const ref = decodeRef(dirName.slice(atIdx + 1))
+          repos.push({ host, org, repo, ref, path: repoPath, sizeBytes })
+        } else {
+          repos.push({ host, org, repo: dirName, path: repoPath, sizeBytes })
+        }
+      }
+    }
+  }
+
+  return repos
+}
+
+// --- cache removal ---
+
+function runGitWorktreeRemove(mainDir: string, wtDir: string): Promise<void> {
+  return new Promise((resolve) => {
+    const proc = spawn('git', ['worktree', 'remove', '--force', wtDir], {
+      cwd: mainDir,
+      stdio: 'ignore',
+    })
+    proc.on('close', () => resolve())
+    proc.on('error', () => resolve())
+  })
+}
+
+export async function removeCachedRepo(cacheDir: string, target: RepoTarget): Promise<void> {
+  if (target.ref) {
+    const wtDir = join(cacheDir, target.host, target.org, `${target.repo}@${encodeRef(target.ref)}`)
+    const exists = await stat(wtDir).catch(() => null)
+    if (!exists) {
+      throw new Error(`Not in cache: ${formatRepoTarget(target)}`)
+    }
+    const mainDir = join(cacheDir, target.host, target.org, target.repo)
+    await runGitWorktreeRemove(mainDir, wtDir)
+    await rm(wtDir, { recursive: true, force: true })
+    return
+  }
+
+  const mainDir = join(cacheDir, target.host, target.org, target.repo)
+  const exists = await stat(mainDir).catch(() => null)
+  if (!exists) {
+    throw new Error(`Not in cache: ${formatRepoTarget(target)}`)
+  }
+
+  // Find and remove worktrees for this repo
+  const orgDir = join(cacheDir, target.host, target.org)
+  const prefix = `${target.repo}@`
+  let worktreeDirs: string[] = []
+  try {
+    const entries = await readdir(orgDir)
+    worktreeDirs = entries.filter(e => e.startsWith(prefix)).map(e => join(orgDir, e))
+  } catch {}
+
+  for (const wtDir of worktreeDirs) {
+    await runGitWorktreeRemove(mainDir, wtDir)
+    await rm(wtDir, { recursive: true, force: true })
+  }
+
+  await rm(mainDir, { recursive: true, force: true })
+}
+
+// --- factory ---
+
+export function createRepoCache(config?: RepoCacheConfig): RepoCache {
+  const cacheDir = config?.cacheDir ?? CACHE_DIR
+  const cacheTtl = config?.cacheTtl ?? CACHE_TTL
+  const allowlist = config?.allowlist
+
+  return {
+    async ensureRepo(
+      target: string | RepoTarget,
+      opts?: { onProgress?: (msg: string) => void; force?: boolean },
+    ): Promise<string> {
+      const resolved = resolveRepoTarget(target)
+      checkAllowlist(resolved, allowlist)
+      const effectiveTtl = opts?.force ? 0 : cacheTtl
+      return ensureRepo(resolved, { cacheDir, cacheTtl: effectiveTtl }, opts?.onProgress)
+    },
+
+    listRepos: () => listCachedRepos(cacheDir),
+    async removeRepo(target: string | RepoTarget): Promise<void> {
+      return removeCachedRepo(cacheDir, resolveRepoTarget(target))
+    },
+  }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseRepoTarget } from './parse-target.js'
+import { parseRepoTarget, formatRepoTarget, resolveRepoTarget } from './parse-target.js'
 
 describe('parseRepoTarget', () => {
   it('parses org/repo as github.com target', () => {
@@ -148,5 +148,72 @@ describe('parseRepoTarget', () => {
 
   it('rejects ref ending with slash', () => {
     expect(parseRepoTarget('org/repo:feature/')).toBeUndefined()
+  })
+})
+
+describe('formatRepoTarget', () => {
+  it('formats github.com target as org/repo shorthand', () => {
+    expect(formatRepoTarget({ host: 'github.com', org: 'facebook', repo: 'react' }))
+      .toBe('facebook/react')
+  })
+
+  it('includes host for non-github targets', () => {
+    expect(formatRepoTarget({ host: 'gitlab.com', org: 'user', repo: 'project' }))
+      .toBe('gitlab.com/user/project')
+  })
+
+  it('appends :ref when ref is present', () => {
+    expect(formatRepoTarget({ host: 'github.com', org: 'org', repo: 'repo', ref: 'main' }))
+      .toBe('org/repo:main')
+  })
+
+  it('appends :ref for custom host with ref', () => {
+    expect(formatRepoTarget({ host: 'gitlab.com', org: 'user', repo: 'project', ref: 'v2.0' }))
+      .toBe('gitlab.com/user/project:v2.0')
+  })
+
+  it('handles ref with slashes', () => {
+    expect(formatRepoTarget({ host: 'github.com', org: 'org', repo: 'repo', ref: 'feature/hooks' }))
+      .toBe('org/repo:feature/hooks')
+  })
+
+  it('round-trips with parseRepoTarget', () => {
+    const inputs = [
+      'facebook/react',
+      'facebook/react:main',
+      'gitlab.com/user/project',
+      'gitlab.com/user/project:v1.0',
+    ]
+    for (const input of inputs) {
+      const parsed = parseRepoTarget(input)!
+      expect(formatRepoTarget(parsed)).toBe(input)
+    }
+  })
+})
+
+describe('resolveRepoTarget', () => {
+  it('parses a valid string into a RepoTarget', () => {
+    expect(resolveRepoTarget('facebook/react')).toEqual({
+      host: 'github.com', org: 'facebook', repo: 'react',
+    })
+  })
+
+  it('passes through a RepoTarget object unchanged', () => {
+    const target = { host: 'github.com', org: 'org', repo: 'repo' }
+    expect(resolveRepoTarget(target)).toBe(target)
+  })
+
+  it('throws on invalid string', () => {
+    expect(() => resolveRepoTarget('invalid')).toThrow('Invalid repo target: invalid')
+  })
+
+  it('throws on empty string', () => {
+    expect(() => resolveRepoTarget('')).toThrow('Invalid repo target: ')
+  })
+
+  it('parses string with ref', () => {
+    expect(resolveRepoTarget('org/repo:main')).toEqual({
+      host: 'github.com', org: 'org', repo: 'repo', ref: 'main',
+    })
   })
 })

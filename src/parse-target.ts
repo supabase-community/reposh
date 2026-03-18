@@ -4,12 +4,8 @@ const VALID_HOST = /^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})$/
 // Valid git ref: alphanumeric, dots, hyphens, underscores, forward slashes
 const SAFE_REF = /^[a-zA-Z0-9][a-zA-Z0-9._\/-]*$|^[a-zA-Z0-9]$/
 
-export interface RepoTarget {
-  host: string
-  org: string
-  repo: string
-  ref?: string
-}
+export type { RepoTarget } from './types.js'
+import type { RepoTarget } from './types.js'
 
 function isValidRef(ref: string): boolean {
   if (!SAFE_REF.test(ref)) return false
@@ -20,7 +16,7 @@ function isValidRef(ref: string): boolean {
   return true
 }
 
-export function repoLabel(target: RepoTarget): string {
+export function formatRepoTarget(target: RepoTarget): string {
   const base = target.host === 'github.com'
     ? `${target.org}/${target.repo}`
     : `${target.host}/${target.org}/${target.repo}`
@@ -61,4 +57,13 @@ export function parseRepoTarget(username: string): RepoTarget | undefined {
   }
 
   return undefined
+}
+
+export function resolveRepoTarget(target: string | RepoTarget): RepoTarget {
+  if (typeof target !== 'string') return target
+  const parsed = parseRepoTarget(target)
+  if (!parsed) {
+    throw new Error(`Invalid repo target: ${target}`)
+  }
+  return parsed
 }

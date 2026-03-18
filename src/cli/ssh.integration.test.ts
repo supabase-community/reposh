@@ -17,11 +17,13 @@ const { repoDir, hostKeyPath } = vi.hoisted(() => {
   return { repoDir, hostKeyPath: join(tmpDir, 'host_key') }
 })
 
-vi.mock('./repo-cache.js', () => ({
-  ensureRepo: vi.fn(async () => repoDir),
+vi.mock('../repo-cache.js', () => ({
+  createRepoCache: () => ({
+    ensureRepo: vi.fn(async () => repoDir),
+  }),
 }))
 
-vi.mock('./paths.js', () => ({
+vi.mock('../constants.js', () => ({
   HOST_KEY_PATH: hostKeyPath,
 }))
 

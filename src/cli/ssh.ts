@@ -3,31 +3,32 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { Duplex } from 'node:stream';
-import type {
-  Connection,
-  AuthContext,
-  AcceptConnection,
-  RejectConnection,
-  Session,
-  ServerChannel,
-  ExecInfo,
+import {
+  type Connection,
+  type AuthContext,
+  type AcceptConnection,
+  type RejectConnection,
+  type Session,
+  type ServerChannel,
+  type ExecInfo,
 } from 'ssh2';
-import { parseRepoTarget, repoLabel } from './parse-target.js';
-import { ensureRepo } from './repo-cache.js';
+import ssh2 from 'ssh2';
+import { parseRepoTarget, formatRepoTarget } from '../parse-target.js';
+import { createRepoCache } from '../repo-cache.js';
+import { HOST_KEY_PATH } from '../constants.js';
 import {
   makeBash,
   makePrefix,
   makeProgressWriter,
   execCommand,
 } from './run-command.js';
-import { HOST_KEY_PATH } from './paths.js';
-
-const require = createRequire(import.meta.url);
-const { Server } = require('ssh2');
 
 type Log = (...args: string[]) => void;
+
+const { Server } = ssh2;
+
+const repoCache = createRepoCache();
 
 export async function loadOrCreateHostKey(
   log: Log = console.error,
@@ -70,7 +71,7 @@ function handleConnection(client: Connection, log: Log): void {
       const prefix = target ? makePrefix(target) : '';
       const resolveRepo = (onProgress: (msg: string) => void) =>
         target
-          ? ensureRepo(target, onProgress)
+          ? repoCache.ensureRepo(target, { onProgress })
           : Promise.reject(
               new Error(
                 'Usage: ssh <org>/<repo>[:ref]@<host> [command]\nExample: ssh facebook/react@reposh ls\nExample: ssh facebook/react:v18.2.0@reposh cat package.json',
@@ -138,7 +139,7 @@ function handleConnection(client: Connection, log: Log): void {
         }
 
         const bash = makeBash(repoDir, prefix);
-        const label = target ? repoLabel(target) : 'repo';
+        const label = target ? formatRepoTarget(target) : 'repo';
         channel.write(`${label} shell. Type commands to browse.\r\n$ `);
 
         let buf = '';
@@ -202,11 +203,15 @@ export async function sshInstall(): Promise<void> {
   // mistake the npx-provided binary for a real global install.
   const cleanPath = (process.env.PATH ?? '')
     .split(':')
-    .filter(p => !p.includes('_npx') && !/\/(tmp|T)\//.test(p))
+    .filter((p) => !p.includes('_npx') && !/\/(tmp|T)\//.test(p))
     .join(':');
   const isInstalled = (() => {
-    try { execSync('which reposh', { env: { PATH: cleanPath }, stdio: 'ignore' }); return true; }
-    catch { return false; }
+    try {
+      execSync('which reposh', { env: { PATH: cleanPath }, stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
   })();
   if (isInstalled) {
     console.log('reposh already on PATH - skipping npm install.');

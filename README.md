@@ -22,6 +22,10 @@ reposh tailwindlabs/tailwindcss grep -rl 'theme' packages/tailwindcss/src/
 reposh supabase/supabase ls apps/
 ```
 
+## Prerequisites
+
+- [git](https://git-scm.com/) must be installed and available on your `PATH`. reposh uses it to clone and fetch repos (see [how it works](#how-it-works)).
+
 ## Setup
 
 1. Install `reposh`:
@@ -79,7 +83,7 @@ On first access, a shallow clone (`depth=1`) is created at `~/.reposh/cache/<hos
 
 Why clone? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase (listing files, grepping for patterns, reading modules). Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one. The tradeoff is a one-time delay on first access while the repo clones, but every command after that runs at local speed.
 
-Clones are refreshed with a `git fetch` after 5 minutes of staleness. If the fetch fails (e.g. you're offline), it serves the stale cache. You can also [pre-cache repos](#cache-management) ahead of time.
+Clones are refreshed with a `git fetch` after 30 minutes of staleness. If the fetch fails (e.g. you're offline), it serves the stale cache. You can also [pre-cache repos](#cache-management) ahead of time.
 
 ### Sandboxing
 
@@ -156,6 +160,75 @@ npx skills add rabbitholehq/reposh
 ```
 
 This works across Claude Code, Cursor, Codex, and [37+ other agents](https://github.com/vercel-labs/skills#supported-agents). Once installed, your agent will automatically reach for reposh when it needs to explore an external codebase.
+
+## Library
+
+reposh exposes its caching and access logic as a library so you can build your own tools on top of it.
+
+```bash
+npm install reposh
+```
+
+```ts
+import { createRepoCache } from 'reposh';
+
+const cache = createRepoCache({
+  allowlist: [{ host: 'github.com', org: 'supabase' }],
+});
+
+// Clone or refresh a repo, returns the local path
+const dir = await cache.ensureRepo('supabase/postgres', {
+  onProgress: console.log,
+});
+
+// List all cached repos
+const repos = await cache.listRepos();
+
+// Remove a cached repo
+await cache.removeRepo('supabase/postgres');
+```
+
+### `createRepoCache(config?)`
+
+Returns a `RepoCache` instance. All config fields are optional - defaults to `~/.reposh/cache`, 30 minute TTL, no allowlist (any repo can be accessed).
+
+| Option      | Type               | Default            | Description                                 |
+| ----------- | ------------------ | ------------------ | ------------------------------------------- |
+| `cacheDir`  | `string`           | `~/.reposh/cache`  | Where clones are stored                     |
+| `cacheTtl`  | `number`           | `1800000` (30 min) | How long before a clone is considered stale |
+| `allowlist` | `AllowlistEntry[]` | `undefined`        | Restrict which orgs/repos can be accessed   |
+
+### `RepoCache`
+
+| Method                      | Description                                                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ensureRepo(target, opts?)` | Clone or refresh a repo. Returns the local path. Accepts `'org/repo'`, `'org/repo:ref'`, or a `RepoTarget` object. Options: `onProgress`, `force`. |
+| `listRepos()`               | List all cached repos with metadata.                                                                                                               |
+| `removeRepo(target)`        | Remove a cached repo and its worktrees.                                                                                                            |
+
+### Allowlist
+
+When an allowlist is provided, only matching repos can be accessed via `ensureRepo`. Omit `repos` to allow all repos in an org.
+
+```ts
+const cache = createRepoCache({
+  allowlist: [
+    { host: 'github.com', org: 'supabase' }, // all supabase repos
+    { host: 'github.com', org: 'facebook', repos: ['react', 'jest'] }, // specific repos only
+  ],
+});
+```
+
+### Utilities
+
+```ts
+import { parseRepoTarget, formatRepoTarget } from 'reposh';
+
+parseRepoTarget('supabase/postgres'); // { host: 'github.com', org: 'supabase', repo: 'postgres' }
+parseRepoTarget('invalid'); // undefined
+
+formatRepoTarget({ host: 'github.com', org: 'supabase', repo: 'postgres' }); // 'supabase/postgres'
+```
 
 ## License
 

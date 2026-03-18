@@ -1,5 +1,6 @@
+import { createInterface } from 'node:readline';
 import { Bash, defineCommand, OverlayFs } from 'just-bash';
-import type { RepoTarget } from './parse-target.js';
+import type { RepoTarget } from '../types.js';
 
 export const aliasCommands = [
   defineCommand('ll', (args, ctx) => ctx.exec!(`ls -alF ${args.join(' ')}`, { cwd: ctx.cwd })),
@@ -27,6 +28,53 @@ export async function execCommand(
   if (result.stdout) stdout(result.stdout);
   if (result.stderr) stderr(result.stderr);
   return result.exitCode;
+}
+
+export function startShell(
+  bash: Bash,
+  label: string,
+  opts: {
+    input: NodeJS.ReadableStream;
+    output: NodeJS.WritableStream;
+    stderr?: NodeJS.WritableStream;
+    isInteractive: boolean;
+    onClose?: () => void;
+  },
+): void {
+  const stderr = opts.stderr ?? opts.output;
+  const rl = createInterface({
+    input: opts.input,
+    output: opts.output,
+    prompt: '$ ',
+    terminal: opts.isInteractive,
+  });
+  opts.output.write(`${label} shell. Type commands to browse.\n`);
+  rl.prompt();
+
+  rl.on('line', async (line: string) => {
+    const cmd = line.trim();
+    if (cmd === 'exit') {
+      rl.close();
+      return;
+    }
+    if (cmd) {
+      try {
+        await execCommand(
+          bash,
+          cmd,
+          (s) => opts.output.write(s),
+          (s) => stderr.write(s),
+        );
+      } catch (err) {
+        stderr.write(
+          `Error: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      }
+    }
+    rl.prompt();
+  });
+
+  rl.on('close', () => opts.onClose?.());
 }
 
 // For interactive terminals: pass messages through as-is (animated \r\x1b[K updates).

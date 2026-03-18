@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { makeBash, makePrefix, makeProgressWriter, execCommand } from './run-command.js'
-import type { RepoTarget } from './parse-target.js'
+import type { RepoTarget } from '../types.js'
 
 describe('makePrefix', () => {
   it('builds /repos/<host>/<org>/<repo> path', () => {

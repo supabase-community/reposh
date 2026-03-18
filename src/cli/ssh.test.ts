@@ -9,12 +9,14 @@ const { testKeyPath } = vi.hoisted(() => {
   return { testKeyPath: join(tmpDir, 'host_key') }
 })
 
-vi.mock('./paths.js', () => ({
+vi.mock('../constants.js', () => ({
   HOST_KEY_PATH: testKeyPath,
 }))
 
 // Avoid pulling in repo-cache/run-command deps
-vi.mock('./repo-cache.js', () => ({ ensureRepo: vi.fn() }))
+vi.mock('../repo-cache.js', () => ({
+  createRepoCache: () => ({ ensureRepo: vi.fn() }),
+}))
 vi.mock('./run-command.js', () => ({
   makeBash: vi.fn(),
   makePrefix: vi.fn(),
