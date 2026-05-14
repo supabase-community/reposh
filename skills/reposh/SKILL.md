@@ -49,15 +49,22 @@ Always quote commands containing pipes or special characters to prevent the loca
 
 ## Reading installed npm dependencies
 
-When the user has an npm dependency installed and you want to read its source at the installed version, prefer `npm:<pkg>@<version>` over manually finding the GitHub repo and guessing the tag scheme:
+Use the `npm:` prefix to read the source of an installed npm dependency. reposh resolves to the version installed in the user's local project automatically (via node's standard `require.resolve`, works with npm/pnpm/yarn/bun):
 
 ```bash
-reposh npm:lodash@4.17.21 cat package.json
-reposh npm:@types/node@20.0.0 cat package.json
-reposh npm:react@18.2.0 cat packages/react/src/React.js
+reposh npm:lodash cat lodash.js          # uses the user's installed version
+reposh npm:@types/node cat package.json
 ```
 
-Check the user's installed version first (in `package.json`, `pnpm-lock.yaml`, `package-lock.json`, etc.), then pass it directly to `npm:<pkg>@<version>`. reposh handles resolving to the right repo and commit via npm provenance attestations or the package.json `repository` field.
+You don't need to read the lockfile yourself - just pass the package name. If the package isn't installed locally, reposh falls back to the registry's latest. If you want a specific version regardless of what's installed, pin it explicitly:
+
+```bash
+reposh npm:lodash@4.17.21 cat package.json   # exact version
+reposh npm:react@next ls                      # dist-tag
+reposh npm:lodash@latest ls                   # explicit latest (bypasses local lookup)
+```
+
+reposh handles resolving to the right repo and commit via npm provenance attestations or the package.json `repository` field.
 
 ## Browsing a specific git ref
 

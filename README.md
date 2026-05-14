@@ -72,35 +72,6 @@ reposh git:facebook/react@v18.2.0 ls       # same as reposh facebook/react@v18.2
 
 This is mainly useful for symmetry with `npm:` (and future sources like `pypi:`, `crates:`).
 
-### npm packages
-
-If you want to read the source of an installed npm dependency at the version you have, target it directly by package name - reposh figures out the source repo and exact commit:
-
-```bash
-reposh npm:lodash@4.17.21 cat package.json
-reposh npm:@types/node@20.0.0 ls
-reposh npm:react           # latest dist-tag
-reposh npm:react@next      # any dist-tag
-```
-
-reposh resolves the source by:
-
-1. Reading the npm [provenance attestation](https://docs.npmjs.com/generating-provenance-statements), if the package was published with `--provenance`. This is the verified path.
-2. Falling back to the package.json `repository` field plus a best-effort tag match (`v1.2.3`, `1.2.3`, `<pkg>@1.2.3`, ...).
-
-If neither path resolves cleanly, reposh prints a progressive error so you can pin the right ref directly:
-
-```
-Failed to resolve npm:somepkg@1.2.3
-  no provenance attestation
-  package.json#repository -> github.com/foo/bar
-  no matching tag (tried: v1.2.3, 1.2.3, somepkg@1.2.3, somepkg-v1.2.3, somepkg-1.2.3)
-
-Try directly: reposh foo/bar@<tag>
-```
-
-Resolved mappings are cached under `~/.reposh/package-resolutions/` so repeat lookups are instant.
-
 ### Non-GitHub repos
 
 Defaults to GitHub. For repos on other hosts, just include the hostname:
@@ -117,6 +88,41 @@ reposh gitea.com/some-org/some-repo ls
 ```
 
 Repos are always accessed over HTTPS.
+
+### npm packages
+
+To read the source of an installed npm dependency, use the `npm:` prefix - reposh resolves it to the underlying git source and commit:
+
+```bash
+reposh npm:lodash                 # version installed in your project; falls back to latest
+reposh npm:lodash@4.17.21         # specific version
+reposh npm:@types/node@20.0.0     # scoped package
+reposh npm:react@next             # dist-tag
+```
+
+When you omit the version (`npm:lodash`), reposh first looks up the version installed in your local project (via node's standard `require.resolve` - works with npm, pnpm, yarn, bun). If not installed locally, it falls back to the registry's `latest` dist-tag. `npm:<pkg>@latest` is an explicit opt-in to the registry's latest, bypassing the local lookup.
+
+reposh resolves an npm target to a git source by:
+
+1. Reading the npm [provenance attestation](https://docs.npmjs.com/generating-provenance-statements), if the package was published with `--provenance`. This gives the exact commit SHA.
+2. Falling back to the package.json `repository` field plus a best-effort tag match (`v1.2.3`, `1.2.3`, `<pkg>@1.2.3`, ...).
+
+If neither path resolves cleanly, reposh prints a progressive error so you can pin the right ref directly:
+
+```
+Failed to resolve npm:somepkg@1.2.3
+  no provenance attestation
+  package.json#repository -> github.com/foo/bar
+  no matching tag (tried: v1.2.3, 1.2.3, somepkg@1.2.3, somepkg-v1.2.3, somepkg-1.2.3)
+
+Try directly: reposh foo/bar@<tag>
+```
+
+Resolved mappings are cached under `~/.reposh/package-resolutions/` so repeat lookups are instant. If the registry is unreachable and a stale resolution exists, reposh serves it with a warning rather than failing - so common npm targets keep working offline.
+
+### Other package managers
+
+If you'd like reposh to support other package managers, please [open an issue](https://github.com/supabase-community/reposh/issues).
 
 ## How it works
 
@@ -237,11 +243,11 @@ Returns a `RepoCache` instance. All config fields are optional - defaults to `~/
 
 ### `RepoCache`
 
-| Method                      | Description                                                                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Method                      | Description                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ensureRepo(target, opts?)` | Clone or refresh a repo. Returns the local path. Accepts `'org/repo'`, `'org/repo@ref'` (or legacy `'org/repo:ref'`), or a `RepoTarget` object. Options: `onProgress`, `force`. |
-| `listRepos()`               | List all cached repos with metadata.                                                                                                               |
-| `removeRepo(target)`        | Remove a cached repo and its worktrees.                                                                                                            |
+| `listRepos()`               | List all cached repos with metadata.                                                                                                                                            |
+| `removeRepo(target)`        | Remove a cached repo and its worktrees.                                                                                                                                         |
 
 ### Allowlist
 
