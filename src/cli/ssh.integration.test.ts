@@ -133,7 +133,7 @@ describe('exec mode', () => {
     }
   })
 
-  it.skipIf(process.platform === 'win32')('reads file contents', async () => {
+  it('reads file contents', async () => {
     const client = await connect(port)
     try {
       const result = await exec(client, 'cat hello.txt')
@@ -144,7 +144,7 @@ describe('exec mode', () => {
     }
   })
 
-  it.skipIf(process.platform === 'win32')('handles nested directories', async () => {
+  it('handles nested directories', async () => {
     const client = await connect(port)
     try {
       const result = await exec(client, 'cat src/index.ts')

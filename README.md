@@ -149,10 +149,6 @@ reposh cache rm facebook/react:v18  # remove a single worktree
 reposh cache rm --all               # clear the entire cache
 ```
 
-## Windows
-
-Windows is not currently supported, but it's on the roadmap. The [just-bash](https://github.com/vercel-labs/just-bash) sandboxed shell has a path separator bug in its `OverlayFs` that prevents file reads on Windows (directory listings work, but `cat`, `head`, etc. fail). We're working on a fix upstream!
-
 ## Agent skill
 
 reposh ships with an [agent skill](https://agentskills.io/home) that teaches your agent when and how to use reposh. Install it with:
