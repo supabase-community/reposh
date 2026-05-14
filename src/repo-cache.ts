@@ -334,7 +334,7 @@ export function createRepoCache(config?: RepoCacheConfig): RepoCache {
   return {
     async ensureRepo(
       target,
-      opts?: { onProgress?: (msg: string) => void; force?: boolean },
+      opts?: { onProgress?: (msg: string) => void; force?: boolean; cwd?: string },
     ): Promise<string> {
       const parsed: Target = typeof target === 'string'
         ? (() => {
@@ -343,7 +343,11 @@ export function createRepoCache(config?: RepoCacheConfig): RepoCache {
             return p
           })()
         : target
-      const git = await resolveTarget(parsed, { onProgress: opts?.onProgress, force: opts?.force })
+      const git = await resolveTarget(parsed, {
+        onProgress: opts?.onProgress,
+        force: opts?.force,
+        cwd: opts?.cwd,
+      })
       checkAllowlist(git, allowlist)
       const effectiveTtl = opts?.force ? 0 : cacheTtl
       return ensureGitRepoInternal(git, { cacheDir, cacheTtl: effectiveTtl }, opts?.onProgress)

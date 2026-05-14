@@ -4,6 +4,17 @@ import { resolveNpm } from './npm/resolver.js'
 export interface ResolveOptions {
   onProgress?: (msg: string) => void
   force?: boolean
+  /**
+   * Project directory used by the npm resolver for local-first version
+   * resolution. See {@link import('./npm/resolver.js').ResolveNpmOptions}.
+   * Ignored for git targets.
+   */
+  cwd?: string
+  /**
+   * Override the npm resolutions cache directory. Primarily for tests.
+   * Ignored for git targets.
+   */
+  resolutionsDir?: string
 }
 
 /**

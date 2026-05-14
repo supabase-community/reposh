@@ -4,76 +4,130 @@ import {
   fetchVersionManifest,
   fetchPackumentDistTag,
   fetchAttestations,
+  type NpmVersionManifest,
 } from './registry.js'
 import { parseAttestationBundle } from './provenance.js'
 import { parseRepositoryField } from './repo-url.js'
 import { tagCandidates } from './tag-candidates.js'
 import { tryFetchAnyRef } from '../repo-cache.js'
-import { readResolution, writeResolution } from './resolutions-cache.js'
+import { readResolution, writeResolution, type ResolutionRecord } from './resolutions-cache.js'
+import { findInstalledPackage, type InstalledPackage } from './project-version.js'
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/
 
 export interface ResolveNpmOptions {
   onProgress?: (msg: string) => void
   force?: boolean
+  /**
+   * Project directory used for local-first version resolution. When set and
+   * the target version is omitted, attempts to read the locally installed
+   * package's version+repository field (like `npx` does) before falling back
+   * to the registry's `latest` dist-tag. Leave undefined to disable local
+   * resolution (e.g. SSH server contexts where there is no meaningful cwd).
+   */
+  cwd?: string
+  /**
+   * Override the on-disk resolutions cache directory. Defaults to
+   * {@link RESOLUTIONS_DIR}. Primarily for tests.
+   */
+  resolutionsDir?: string
 }
 
 /**
  * Resolve an {@link NpmTarget} to a concrete {@link GitTarget} by, in order:
- * 1. Resolving the version (dist-tag -> exact version if needed).
+ * 1. Resolving the version (local install if version omitted and `cwd` set;
+ *    dist-tag -> exact version if needed; otherwise pinned semver).
  * 2. Consulting the on-disk resolutions cache (unless `force`).
  * 3. Preferring npm provenance attestations to pin the source SHA.
  * 4. Falling back to the package.json `repository` field plus a tag-name guess.
  *
  * Successful resolutions are written back to the cache. Pinned semver entries
  * are immutable; dist-tag entries are TTL-bounded ({@link CACHE_TTL}).
+ *
+ * If the registry is unreachable during a fresh resolution and a stale cache
+ * entry exists for this key, the stale entry is served with a warning rather
+ * than erroring. Mirrors the git layer's stale-on-failure behavior.
  */
 export async function resolveNpm(target: NpmTarget, opts: ResolveNpmOptions = {}): Promise<GitTarget> {
   const onProgress = opts.onProgress ?? (() => {})
+  const resolutionsDir = opts.resolutionsDir ?? RESOLUTIONS_DIR
   const spec = target.version ? `${target.name}@${target.version}` : target.name
 
   onProgress(`Resolving npm:${spec}...\n`)
 
-  // 1. Resolve to exact published version.
-  const exactVersion = await resolveExactVersion(target)
-
-  // 2. Cache key: pinned uses exact version; dist-tag/omitted uses the tag name (or 'latest').
-  const cacheKey = SEMVER_RE.test(target.version ?? '') ? exactVersion : (target.version ?? 'latest')
-
-  // 3. Read-through cache (unless force).
-  if (!opts.force) {
-    const cached = await readResolution(RESOLUTIONS_DIR, target.name, cacheKey, { maxAgeMs: CACHE_TTL })
-    if (cached) {
-      onProgress(`  cached resolution -> ${cached.host}/${cached.org}/${cached.repo}@${shortSha(cached.ref)}\n`)
-      return {
-        source: 'git',
-        host: cached.host,
-        org: cached.org,
-        repo: cached.repo,
-        ref: cached.ref,
-      }
+  // 1. Local-first resolution (no network). When the version is omitted and
+  //    we have a project cwd, try to find a locally installed copy and use
+  //    its version + repository field. Survives a registry outage.
+  let localInfo: InstalledPackage | undefined
+  if (target.version === undefined && opts.cwd) {
+    localInfo = await findInstalledPackage(opts.cwd, target.name)
+    if (localInfo) {
+      onProgress(`  using locally installed ${target.name}@${localInfo.version}\n`)
     }
   }
 
-  // 4. Try provenance.
-  const provenance = await tryProvenance(target.name, exactVersion, onProgress)
-  if (provenance) {
-    onProgress(`  -> ${formatGit(provenance)}@${shortSha(provenance.ref)} (verified via npm provenance)\n`)
-    await writeResolution(RESOLUTIONS_DIR, target.name, cacheKey, {
-      host: provenance.host, org: provenance.org, repo: provenance.repo, ref: provenance.ref,
-    })
-    return provenance
+  // 2. Cache key derivation. Pinned (exact semver, including local-install hits)
+  //    use the version; dist-tag / omitted-without-local use the tag name (or
+  //    'latest'). We must derive this without hitting the network so that the
+  //    stale-cache fallback (step 5) has something to look up if the registry
+  //    is unreachable.
+  const explicit = target.version
+  let cacheKey: string
+  if (localInfo) {
+    cacheKey = localInfo.version
+  } else if (explicit !== undefined && SEMVER_RE.test(explicit)) {
+    cacheKey = explicit
+  } else {
+    cacheKey = explicit ?? 'latest'
   }
 
-  // 5. Fallback: package.json repository + tag match.
-  const fallback = await resolveFallback(target.name, exactVersion, onProgress)
-  await writeResolution(RESOLUTIONS_DIR, target.name, cacheKey, {
-    host: fallback.host, org: fallback.org, repo: fallback.repo, ref: fallback.ref,
-  })
-  return fallback
+  // 3. Read-through cache (unless force).
+  if (!opts.force) {
+    const cached = await readResolution(resolutionsDir, target.name, cacheKey, { maxAgeMs: CACHE_TTL })
+    if (cached) {
+      onProgress(`  cached resolution -> ${cached.host}/${cached.org}/${cached.repo}@${shortSha(cached.ref)}\n`)
+      return cachedToGitTarget(cached)
+    }
+  }
+
+  // 4. Resolve fresh. On any registry/network failure, fall back to a stale
+  //    cache entry (if any) rather than erroring out. Mirrors the git layer's
+  //    refreshRepo "use stale on failure" pattern.
+  try {
+    // Determine the exact version to resolve. If we found a local install,
+    // use that. Otherwise hit the registry (semver passes through; dist-tags
+    // resolve to a concrete version).
+    const exactVersion = localInfo
+      ? localInfo.version
+      : await resolveExactVersionFromRegistry(target)
+
+    const provenance = await tryProvenance(target.name, exactVersion, onProgress)
+    if (provenance) {
+      onProgress(`  -> ${formatGit(provenance)}@${shortSha(provenance.ref)} (verified via npm provenance)\n`)
+      await writeResolution(resolutionsDir, target.name, cacheKey, {
+        host: provenance.host, org: provenance.org, repo: provenance.repo, ref: provenance.ref,
+      })
+      return provenance
+    }
+
+    // 5. Fallback: package.json repository + tag match.
+    const fallback = await resolveFallback(target.name, exactVersion, onProgress, localInfo)
+    await writeResolution(resolutionsDir, target.name, cacheKey, {
+      host: fallback.host, org: fallback.org, repo: fallback.repo, ref: fallback.ref,
+    })
+    return fallback
+  } catch (err) {
+    const stale = await readResolution(resolutionsDir, target.name, cacheKey, { maxAgeMs: Infinity })
+    if (stale) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      onProgress(`  resolution refresh failed, using stale cache: ${errMsg}\n`)
+      return cachedToGitTarget(stale)
+    }
+    throw err
+  }
 }
 
-async function resolveExactVersion(target: NpmTarget): Promise<string> {
+async function resolveExactVersionFromRegistry(target: NpmTarget): Promise<string> {
   const v = target.version ?? 'latest'
   if (SEMVER_RE.test(v)) return v
   return fetchPackumentDistTag(target.name, v)
@@ -114,9 +168,19 @@ async function resolveFallback(
   name: string,
   version: string,
   onProgress: (msg: string) => void,
+  localInfo?: InstalledPackage,
 ): Promise<GitTarget> {
-  const manifest = await fetchVersionManifest(name, version)
-  const loc = parseRepositoryField(manifest.repository)
+  // Prefer the locally installed package's repository field when available,
+  // saving a registry round-trip. Falls back to fetching the version manifest.
+  let repoField: NpmVersionManifest['repository']
+  if (localInfo) {
+    repoField = localInfo.repository
+  } else {
+    const manifest = await fetchVersionManifest(name, version)
+    repoField = manifest.repository
+  }
+
+  const loc = parseRepositoryField(repoField)
 
   if (!loc) {
     throw new Error(
@@ -156,6 +220,10 @@ async function resolveFallback(
     repo: loc.repo,
     ref: matched,
   }
+}
+
+function cachedToGitTarget(c: ResolutionRecord): GitTarget {
+  return { source: 'git', host: c.host, org: c.org, repo: c.repo, ref: c.ref }
 }
 
 function formatGit(t: GitTarget): string {

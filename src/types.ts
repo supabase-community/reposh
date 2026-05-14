@@ -36,7 +36,10 @@ export interface CachedRepo {
 }
 
 export interface RepoCache {
-  ensureRepo(target: string | Target, opts?: { onProgress?: (msg: string) => void; force?: boolean }): Promise<string>
+  ensureRepo(
+    target: string | Target,
+    opts?: { onProgress?: (msg: string) => void; force?: boolean; cwd?: string },
+  ): Promise<string>
   listRepos(): Promise<CachedRepo[]>
   removeRepo(target: string | GitTarget): Promise<void>
 }

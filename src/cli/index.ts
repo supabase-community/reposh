@@ -48,8 +48,9 @@ cache
         process.stdin.isTTY ?? false,
       );
       try {
-        const resolved = await resolveTarget(parsed, { onProgress, force: true });
-        await repoCache.ensureRepo(resolved, { onProgress, force: true });
+        const cwd = process.cwd();
+        const resolved = await resolveTarget(parsed, { onProgress, force: true, cwd });
+        await repoCache.ensureRepo(resolved, { onProgress, force: true, cwd });
         console.error(`Cached ${formatTarget(parsed)}`);
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));
@@ -151,11 +152,13 @@ program
       isInteractive,
     );
 
+    const cwd = process.cwd();
+
     let resolved: GitTarget;
     let repoDir: string;
     try {
-      resolved = await resolveTarget(parsed, { onProgress });
-      repoDir = await repoCache.ensureRepo(resolved, { onProgress });
+      resolved = await resolveTarget(parsed, { onProgress, cwd });
+      repoDir = await repoCache.ensureRepo(resolved, { onProgress, cwd });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
