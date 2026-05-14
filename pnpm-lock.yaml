@@ -718,8 +718,8 @@ packages:
       picomatch:
         optional: true
 
-  file-type@21.3.0:
-    resolution: {integrity: sha512-8kPJMIGz1Yt/aPEwOsrR97ZyZaD1Iqm8PClb1nYFclUCkBi0Ma5IsYNQzvSFS9ib51lWyIw5mIT9rWzI/xjpzA==}
+  file-type@21.3.4:
+    resolution: {integrity: sha512-Ievi/yy8DS3ygGvT47PjSfdFoX+2isQueoYP1cntFW1JLYAuS4GD7NUPGg4zv2iZfV52uDyk5w5Z0TdpRS6Q1g==}
     engines: {node: '>=20'}
 
   fs-constants@1.0.0:
@@ -1689,7 +1689,7 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.3
 
-  file-type@21.3.0:
+  file-type@21.3.4:
     dependencies:
       '@tokenizer/inflate': 0.4.1
       strtok3: 10.3.4
@@ -1731,7 +1731,7 @@ snapshots:
     dependencies:
       diff: 8.0.3
       fast-xml-parser: 5.8.0
-      file-type: 21.3.0
+      file-type: 21.3.4
       ini: 6.0.0
       minimatch: 10.2.4
       modern-tar: 0.7.5
