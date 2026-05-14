@@ -2,9 +2,9 @@
 
 > Bash into any public repo
 
-reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this when you want to explore other codebases without manual clones or fragile web fetches.
+reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this when you want to explore other codebases without manual clones or opaque web fetches.
 
-Your agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if the repo were local:
+Your coding agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if your current working directory was in that repo:
 
 ```bash
 reposh colinhacks/zod grep -rl 'ZodError' packages/zod/src/
@@ -22,6 +22,8 @@ reposh tailwindlabs/tailwindcss grep -rl 'theme' packages/tailwindcss/src/
 reposh supabase/supabase ls apps/
 ```
 
+See [how it works](#how-it-works) for details on the local caching and sandboxing implementation.
+
 ## Prerequisites
 
 - [git](https://git-scm.com/) must be installed and available on your `PATH`. reposh uses it to clone and fetch repos (see [how it works](#how-it-works)).
@@ -37,7 +39,7 @@ reposh supabase/supabase ls apps/
 2. Teach your agent to use it with the [agent skill](#agent-skill):
 
    ```bash
-   npx skills add rabbitholehq/reposh
+   npx skills add supabase-community/reposh
    ```
 
 ## Usage
@@ -81,7 +83,7 @@ Repos are always accessed over HTTPS.
 
 On first access, a shallow clone (`depth=1`) is created at `~/.reposh/cache/<host>/<org>/<repo>/`. Every command after that runs against the local clone. When you request a specific branch or tag, reposh uses git worktrees to share the object store with the main clone - so only new/different objects are fetched.
 
-Why clone? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase (listing files, grepping for patterns, reading modules). Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one. The tradeoff is a one-time delay on first access while the repo clones, but every command after that runs at local speed.
+Why clone vs web fetch? Agents tend to run a lot of tool calls back to back (and often in parallel) when they're exploring a codebase (listing files, grepping for patterns, reading modules). Having the repo on disk means all of those reads are fast, rather than hitting a remote for each one. The tradeoff is a one-time delay on first access while the repo clones, but every command after that runs at local speed.
 
 Clones are refreshed with a `git fetch` after 30 minutes of staleness. If the fetch fails (e.g. you're offline), it serves the stale cache. You can also [pre-cache repos](#cache-management) ahead of time.
 
@@ -89,9 +91,9 @@ Clones are refreshed with a `git fetch` after 30 minutes of staleness. If the fe
 
 Commands run inside [just-bash](https://github.com/vercel-labs/just-bash) - a TypeScript implementation of a bash shell that runs entirely in-process. It does not use a real shell on your host, container, or VM - just a JS runtime emulating common shell commands (`ls`, `cat`, `grep`, `find`, `head`, `tail`, etc.) against a virtual filesystem. See the just-bash [docs](https://github.com/vercel-labs/just-bash) for the full list of supported commands.
 
-Why sandbox? Many agent harnesses generate their permission allowlists based on the top-level command. Sandboxing means you can allowlist `reposh` once and trust that any shell command the agent runs is limited to the virtual commands built-in to the just-bash emulator and scoped to the specified repo.
+Why sandbox? Many agent harnesses generate their permission allowlists based on the top-level command. Sandboxing means you can allowlist `reposh` once and trust that any shell command the agent runs is limited to the virtual read-only commands built-in to the just-bash emulator and scoped to the specified repo.
 
-It also means you don't need to worry about what's in the repos themselves. Commands are read-only and sandboxed, so there's no chance of accidentally running something destructive from an unfamiliar codebase.
+It also means you don't need to worry about what's in the repos themselves. Commands are read-only and sandboxed, so there's no way to accidentally run something destructive from an unfamiliar codebase.
 
 ## Claude Code sandbox mode
 
@@ -156,7 +158,7 @@ Windows is not currently supported, but it's on the roadmap. The [just-bash](htt
 reposh ships with an [agent skill](https://agentskills.io/home) that teaches your agent when and how to use reposh. Install it with:
 
 ```bash
-npx skills add rabbitholehq/reposh
+npx skills add supabase-community/reposh
 ```
 
 This works across Claude Code, Cursor, Codex, and [37+ other agents](https://github.com/vercel-labs/skills#supported-agents). Once installed, your agent will automatically reach for reposh when it needs to explore an external codebase.
