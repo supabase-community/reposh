@@ -47,24 +47,35 @@ reposh vercel/next.js "grep -rl 'middleware' src/ | head -10"
 
 Always quote commands containing pipes or special characters to prevent the local shell from interpreting them.
 
-## Browsing a specific version
+## Reading installed npm dependencies
 
-Append `:ref` to target a specific branch or tag:
-
-```bash
-reposh <org>/<repo>:<tag-or-branch> <command>
-```
-
-This is especially useful when investigating dependencies. Check what version the user has installed (in package.json, pyproject.toml, Cargo.toml, go.mod, etc.), then explore that exact version's source:
+When the user has an npm dependency installed and you want to read its source at the installed version, prefer `npm:<pkg>@<version>` over manually finding the GitHub repo and guessing the tag scheme:
 
 ```bash
-# Check the user's installed version first, then explore it
-reposh stripe/stripe-node:v17.4.0 cat src/resources/Customers.ts
-reposh vercel/next.js:canary ls src/
-reposh pallets/flask:3.1.1 cat src/flask/app.py
+reposh npm:lodash@4.17.21 cat package.json
+reposh npm:@types/node@20.0.0 cat package.json
+reposh npm:react@18.2.0 cat packages/react/src/React.js
 ```
 
-Without `:ref`, reposh uses the repository's default branch - which may have unreleased changes that don't match the version the user has installed. Tags typically follow the project's release naming convention (v1.0.0, 1.0.0, etc.) - check the repo's releases or tags if unsure.
+Check the user's installed version first (in `package.json`, `pnpm-lock.yaml`, `package-lock.json`, etc.), then pass it directly to `npm:<pkg>@<version>`. reposh handles resolving to the right repo and commit via npm provenance attestations or the package.json `repository` field.
+
+## Browsing a specific git ref
+
+If you already know the exact GitHub repo and ref (branch, tag, or commit SHA):
+
+```bash
+reposh <org>/<repo>@<tag-or-branch> <command>
+```
+
+This is especially useful when investigating dependencies in non-npm ecosystems. Check what version the user has installed (in pyproject.toml, Cargo.toml, go.mod, etc.), then explore that exact version's source:
+
+```bash
+reposh facebook/react@v18.2.0 cat packages/react/src/React.js
+reposh vercel/next.js@canary ls src/
+reposh pallets/flask@3.1.1 cat src/flask/app.py
+```
+
+Without `@ref`, reposh uses the repository's default branch - which may have unreleased changes that don't match the version the user has installed. Tags typically follow the project's release naming convention (v1.0.0, 1.0.0, etc.) - check the repo's releases or tags if unsure.
 
 ## Non-GitHub repos
 
@@ -77,6 +88,7 @@ reposh gitea.com/some-org/some-repo ls
 
 ## When to use reposh
 
+- Reading the source of an installed npm dependency at its installed version
 - Investigating a specific version of a dependency the user has installed
 - Debugging errors from a library - reading the actual source beats guessing from docs
 - Verifying exact function signatures, types, or behavior
@@ -110,6 +122,10 @@ reposh <org>/<repo> cat src/core/module.ts
 reposh <org>/<repo> "grep -n 'export' src/index.ts"
 reposh <org>/<repo> "cat src/utils.ts | head -50"
 ```
+
+## npm resolution errors
+
+If reposh can't resolve an `npm:` target (e.g. no provenance and no matching tag), it produces a progressive error showing how far it got, including the resolved git repo when known. You can fall back to a direct `<org>/<repo>@<tag>` target in that case.
 
 ## Subagent usage
 

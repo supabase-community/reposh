@@ -49,18 +49,57 @@ reposh is designed to be used by LLMs. Once you've [installed the skill](#agent-
 You can also use it directly from the terminal:
 
 ```bash
-reposh <org>/<repo>[:ref] <bash command>
+reposh <org>/<repo>[@ref] <bash command>
 ```
 
-Append `:ref` to target a specific branch or tag:
+Append `@ref` to target a specific branch or tag:
 
 ```bash
-reposh facebook/react:v18.2.0 cat package.json
-reposh vercel/next.js:canary ls src/
-reposh gitlab.com/org/project:main ls
+reposh facebook/react@v18.2.0 cat package.json
+reposh vercel/next.js@canary ls src/
+reposh gitlab.com/org/project@main ls
 ```
 
-Without `:ref`, reposh uses the repository's default branch.
+Without `@ref`, reposh uses the repository's default branch.
+
+The legacy `:ref` separator (e.g. `facebook/react:v18.2.0`) is still recognized for backward compatibility, but `@ref` is the canonical form.
+
+You can also write the source explicitly with a `git:` prefix:
+
+```bash
+reposh git:facebook/react@v18.2.0 ls       # same as reposh facebook/react@v18.2.0 ls
+```
+
+This is mainly useful for symmetry with `npm:` (and future sources like `pypi:`, `crates:`).
+
+### npm packages
+
+If you want to read the source of an installed npm dependency at the version you have, target it directly by package name - reposh figures out the source repo and exact commit:
+
+```bash
+reposh npm:lodash@4.17.21 cat package.json
+reposh npm:@types/node@20.0.0 ls
+reposh npm:react           # latest dist-tag
+reposh npm:react@next      # any dist-tag
+```
+
+reposh resolves the source by:
+
+1. Reading the npm [provenance attestation](https://docs.npmjs.com/generating-provenance-statements), if the package was published with `--provenance`. This is the verified path.
+2. Falling back to the package.json `repository` field plus a best-effort tag match (`v1.2.3`, `1.2.3`, `<pkg>@1.2.3`, ...).
+
+If neither path resolves cleanly, reposh prints a progressive error so you can pin the right ref directly:
+
+```
+Failed to resolve npm:somepkg@1.2.3
+  no provenance attestation
+  package.json#repository -> github.com/foo/bar
+  no matching tag (tried: v1.2.3, 1.2.3, somepkg@1.2.3, somepkg-v1.2.3, somepkg-1.2.3)
+
+Try directly: reposh foo/bar@<tag>
+```
+
+Resolved mappings are cached under `~/.reposh/package-resolutions/` so repeat lookups are instant.
 
 ### Non-GitHub repos
 
@@ -145,7 +184,7 @@ You can also list, inspect, and clean up cached repos:
 ```bash
 reposh cache ls                     # list cached repos with sizes
 reposh cache rm facebook/react      # remove a repo and its worktrees
-reposh cache rm facebook/react:v18  # remove a single worktree
+reposh cache rm facebook/react@v18  # remove a single worktree
 reposh cache rm --all               # clear the entire cache
 ```
 
@@ -200,7 +239,7 @@ Returns a `RepoCache` instance. All config fields are optional - defaults to `~/
 
 | Method                      | Description                                                                                                                                        |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ensureRepo(target, opts?)` | Clone or refresh a repo. Returns the local path. Accepts `'org/repo'`, `'org/repo:ref'`, or a `RepoTarget` object. Options: `onProgress`, `force`. |
+| `ensureRepo(target, opts?)` | Clone or refresh a repo. Returns the local path. Accepts `'org/repo'`, `'org/repo@ref'` (or legacy `'org/repo:ref'`), or a `RepoTarget` object. Options: `onProgress`, `force`. |
 | `listRepos()`               | List all cached repos with metadata.                                                                                                               |
 | `removeRepo(target)`        | Remove a cached repo and its worktrees.                                                                                                            |
 
