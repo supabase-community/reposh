@@ -60,7 +60,7 @@ reposh vercel/next.js:canary ls src/
 reposh gitlab.com/org/project:main ls
 ```
 
-Without `:ref`, reposh uses the repository's default branch. Commit hashes are not currently supported.
+Without `:ref`, reposh uses the repository's default branch.
 
 ### Non-GitHub repos
 
