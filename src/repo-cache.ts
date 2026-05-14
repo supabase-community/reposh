@@ -129,6 +129,40 @@ async function ensureMainClone(
   return dir
 }
 
+/**
+ * Try fetching each candidate ref into the main clone; return the name of the
+ * first ref that succeeds. Throws an error listing all candidates if none match.
+ *
+ * Used by the npm resolver fallback path to test which git tag scheme the
+ * upstream repo uses for a given version.
+ */
+export async function tryFetchAnyRef(
+  cacheDir: string,
+  base: { host: string; org: string; repo: string },
+  candidates: string[],
+  onProgress?: (msg: string) => void,
+): Promise<string> {
+  // Ensure main clone exists (the object store we'll fetch into).
+  // Use cacheTtl=Infinity so we don't force a refresh based on caller staleness preferences;
+  // the fetch of the candidate ref itself is the network op we care about.
+  const mainTarget: GitTarget = { source: 'git', host: base.host, org: base.org, repo: base.repo }
+  const mainDir = await ensureMainClone(mainTarget, cacheDir, Infinity, onProgress)
+
+  let lastErr: Error | undefined
+  for (const ref of candidates) {
+    try {
+      await runGit(['fetch', '--depth=1', 'origin', ref], { cwd: mainDir })
+      return ref
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+
+  const tried = candidates.join(', ')
+  const detail = lastErr ? ` (last error: ${lastErr.message})` : ''
+  throw new Error(`No matching ref (tried: ${tried})${detail}`)
+}
+
 // Ensure a worktree exists for a specific ref
 async function ensureWorktreeDir(
   target: GitTarget,
