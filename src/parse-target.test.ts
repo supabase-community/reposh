@@ -149,6 +149,24 @@ describe('parseRepoTarget', () => {
   it('rejects ref ending with slash', () => {
     expect(parseRepoTarget('org/repo:feature/')).toBeUndefined()
   })
+
+  it('parses ref with @ (monorepo tags like ai@6.0.139)', () => {
+    expect(parseRepoTarget('vercel/ai:ai@6.0.139')).toEqual({
+      host: 'github.com', org: 'vercel', repo: 'ai', ref: 'ai@6.0.139',
+    })
+  })
+
+  it('parses ref with @ and slashes', () => {
+    expect(parseRepoTarget('org/repo:@scope/pkg@1.0.0')).toEqual({
+      host: 'github.com', org: 'org', repo: 'repo', ref: '@scope/pkg@1.0.0',
+    })
+  })
+
+  it('parses ref with + (semver build metadata)', () => {
+    expect(parseRepoTarget('org/repo:v1.0.0+build.123')).toEqual({
+      host: 'github.com', org: 'org', repo: 'repo', ref: 'v1.0.0+build.123',
+    })
+  })
 })
 
 describe('formatRepoTarget', () => {
@@ -183,6 +201,7 @@ describe('formatRepoTarget', () => {
       'facebook/react:main',
       'gitlab.com/user/project',
       'gitlab.com/user/project:v1.0',
+      'vercel/ai:ai@6.0.139',
     ]
     for (const input of inputs) {
       const parsed = parseRepoTarget(input)!

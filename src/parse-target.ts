@@ -2,7 +2,7 @@ const SAFE_COMPONENT = /^[a-zA-Z0-9._-]+$/
 // Valid hostname: at least one dot, starts and ends with alnum (e.g. "github.com")
 const VALID_HOST = /^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})$/
 // Valid git ref: alphanumeric, dots, hyphens, underscores, forward slashes
-const SAFE_REF = /^[a-zA-Z0-9][a-zA-Z0-9._\/-]*$|^[a-zA-Z0-9]$/
+const SAFE_REF = /^[a-zA-Z0-9@][a-zA-Z0-9._\/@+-]*$|^[a-zA-Z0-9]$/
 
 export type { RepoTarget } from './types.js'
 import type { RepoTarget } from './types.js'

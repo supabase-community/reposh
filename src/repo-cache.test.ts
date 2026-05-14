@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { resolve } from 'node:path'
+import { resolve, join } from 'node:path'
 import { spawn as realSpawn } from 'node:child_process'
 import type { RepoTarget } from './types.js'
 
@@ -12,15 +12,17 @@ vi.mock('node:child_process', () => ({
 vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(async () => {}),
   stat: vi.fn(async () => { throw new Error('ENOENT') }),
+  readdir: vi.fn(async () => []),
+  lstat: vi.fn(async () => ({ size: 100 })),
 }))
 
 const TEST_CACHE_DIR = '/tmp/reposh-test-cache'
 const TEST_CONFIG = { cacheDir: TEST_CACHE_DIR, cacheTtl: 300_000 }
 const expectedDir = resolve(TEST_CACHE_DIR, 'github.com', 'facebook', 'react')
 
-import { ensureRepo, encodeRef, createRepoCache } from './repo-cache.js'
+import { ensureRepo, encodeRef, listCachedRepos, createRepoCache } from './repo-cache.js'
 import { spawn } from 'node:child_process'
-import { stat } from 'node:fs/promises'
+import { stat, readdir, lstat } from 'node:fs/promises'
 import { checkAllowlist } from './allowlist.js'
 
 vi.mock('./allowlist.js', () => ({
@@ -29,6 +31,8 @@ vi.mock('./allowlist.js', () => ({
 
 const mockSpawn = vi.mocked(spawn)
 const mockStat = vi.mocked(stat)
+const mockReaddir = vi.mocked(readdir)
+const mockLstat = vi.mocked(lstat)
 
 function fakeProc(exitCode = 0, stderrData?: string) {
   const proc = {
@@ -65,6 +69,14 @@ describe('encodeRef', () => {
   it('preserves double hyphens in ref names', () => {
     // This is the critical case: refs with -- must not collide
     expect(encodeRef('feature--test')).toBe('feature--test')
+  })
+
+  it('preserves @ in monorepo-style tags', () => {
+    expect(encodeRef('ai@6.0.139')).toBe('ai@6.0.139')
+  })
+
+  it('encodes slashes but preserves @ in scoped tags', () => {
+    expect(encodeRef('@scope/pkg@1.0.0')).toBe('@scope~pkg@1.0.0')
   })
 })
 
@@ -352,5 +364,31 @@ describe('createRepoCache', () => {
     // With force: should refresh
     await cache.ensureRepo(target, { force: true })
     expect(mockSpawn).toHaveBeenCalled()
+  })
+})
+
+describe('listCachedRepos', () => {
+  const dirs: Record<string, string[]> = {
+    [TEST_CACHE_DIR]: ['github.com'],
+    [join(TEST_CACHE_DIR, 'github.com')]: ['vercel'],
+    [join(TEST_CACHE_DIR, 'github.com', 'vercel')]: ['ai', 'ai@ai@6.0.139'],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockReaddir.mockImplementation((async (p: any) => dirs[String(p)] ?? []) as any)
+    mockStat.mockResolvedValue({ isDirectory: () => true } as any)
+    mockLstat.mockResolvedValue({ size: 100 } as any)
+  })
+
+  it('parses directory with @ in ref correctly (monorepo tags)', async () => {
+    const repos = await listCachedRepos(TEST_CACHE_DIR)
+
+    expect(repos.find(r => !r.ref)).toEqual(expect.objectContaining({
+      host: 'github.com', org: 'vercel', repo: 'ai',
+    }))
+    expect(repos.find(r => r.ref)).toEqual(expect.objectContaining({
+      host: 'github.com', org: 'vercel', repo: 'ai', ref: 'ai@6.0.139',
+    }))
   })
 })
