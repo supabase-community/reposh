@@ -18,8 +18,6 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "start": "tsx src/cli/index.ts ssh serve",
-    "dev": "tsx watch src/cli/index.ts ssh serve",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
