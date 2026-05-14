@@ -4,7 +4,7 @@
 
 reposh lets agents explore any public repo the same way they explore your local codebase - with `grep`, `find`, `cat`, and the rest of the shell tools they already know. Use this when you want to explore other codebases without manual clones or opaque web fetches.
 
-Your coding agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if your current working directory was in that repo:
+Your coding agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if your shell was running in that repo:
 
 ```bash
 reposh colinhacks/zod grep -rl 'ZodError' packages/zod/src/
