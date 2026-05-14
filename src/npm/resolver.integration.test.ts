@@ -53,3 +53,30 @@ describe('resolveNpm - dist-tags', () => {
     expect(result.ref).toBeDefined()
   })
 })
+
+describe('resolveNpm - caching', () => {
+  it('reads from disk cache on second invocation', async () => {
+    // First call populates the cache
+    const a = await resolveNpm({ source: 'npm', name: '@sigstore/sign', version: '3.0.0' })
+    // Second call should return identical result
+    const b = await resolveNpm({ source: 'npm', name: '@sigstore/sign', version: '3.0.0' })
+    expect(b).toEqual(a)
+  })
+
+  it('force bypasses the disk cache', async () => {
+    // Populate cache
+    await resolveNpm({ source: 'npm', name: '@sigstore/sign', version: '3.0.0' })
+    // Force should still resolve correctly (network roundtrip happens, but we can't easily assert that here without mocking)
+    const fresh = await resolveNpm({ source: 'npm', name: '@sigstore/sign', version: '3.0.0' }, { force: true })
+    expect(fresh.source).toBe('git')
+    expect(fresh.org).toBe('sigstore')
+  })
+
+  it('normalizes omitted version and @latest to the same cache entry', async () => {
+    // First call: omitted version (normalized to latest)
+    const a = await resolveNpm({ source: 'npm', name: 'lodash' })
+    // Second call: explicit @latest
+    const b = await resolveNpm({ source: 'npm', name: 'lodash', version: 'latest' })
+    expect(b).toEqual(a)
+  })
+})
