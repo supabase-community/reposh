@@ -15,7 +15,9 @@ import {
 } from 'ssh2';
 import ssh2 from 'ssh2';
 import { parseTarget, formatTarget } from '../parse-target.js';
+import { resolveTarget } from '../resolve-target.js';
 import { createRepoCache } from '../repo-cache.js';
+import type { Target, GitTarget } from '../types.js';
 import { HOST_KEY_PATH } from '../constants.js';
 import {
   makeBash,
@@ -67,13 +69,16 @@ function handleConnection(client: Connection, log: Log): void {
         accept();
       });
 
-      const parsed = parseTarget(username);
-      // SSH path only supports git targets for now (npm resolution wired in a later phase).
-      const target = parsed?.source === 'git' ? parsed : undefined;
-      const prefix = target ? makePrefix(target) : '';
-      const resolveRepo = (onProgress: (msg: string) => void) =>
-        target
-          ? repoCache.ensureRepo(target, { onProgress })
+      const parsed: Target | undefined = parseTarget(username);
+      const resolveRepo = (
+        onProgress: (msg: string) => void,
+      ): Promise<{ repoDir: string; resolved: GitTarget }> =>
+        parsed
+          ? (async () => {
+              const resolved = await resolveTarget(parsed, { onProgress });
+              const repoDir = await repoCache.ensureRepo(resolved, { onProgress });
+              return { repoDir, resolved };
+            })()
           : Promise.reject(
               new Error(
                 'Usage: ssh <org>/<repo>[@ref]@<host> [command]\nExample: ssh facebook/react@reposh ls\nExample: ssh facebook/react@v18.2.0@reposh cat package.json',
@@ -92,10 +97,11 @@ function handleConnection(client: Connection, log: Log): void {
           log(`exec ${username}: ${command}`);
 
           let repoDir: string;
+          let resolved: GitTarget;
           try {
-            repoDir = await resolveRepo(
+            ({ repoDir, resolved } = await resolveRepo(
               makeProgressWriter((msg) => channel.stderr.write(msg), hasPty),
-            );
+            ));
           } catch (err) {
             channel.stderr.write(
               `${err instanceof Error ? err.message : String(err)}\n`,
@@ -106,7 +112,7 @@ function handleConnection(client: Connection, log: Log): void {
           }
 
           try {
-            const bash = makeBash(repoDir, prefix);
+            const bash = makeBash(repoDir, makePrefix(resolved));
             const code = await execCommand(
               bash,
               command,
@@ -128,10 +134,11 @@ function handleConnection(client: Connection, log: Log): void {
         const channel = accept();
 
         let repoDir: string;
+        let resolved: GitTarget;
         try {
-          repoDir = await resolveRepo((msg) =>
+          ({ repoDir, resolved } = await resolveRepo((msg) =>
             channel.write(msg.replace(/\n/g, '\r\n')),
-          );
+          ));
         } catch (err) {
           channel.write(
             `${err instanceof Error ? err.message : String(err)}\r\n`,
@@ -140,8 +147,8 @@ function handleConnection(client: Connection, log: Log): void {
           return;
         }
 
-        const bash = makeBash(repoDir, prefix);
-        const label = target ? formatTarget(target) : 'repo';
+        const bash = makeBash(repoDir, makePrefix(resolved));
+        const label = parsed ? formatTarget(parsed) : 'repo';
         channel.write(`${label} shell. Type commands to browse.\r\n$ `);
 
         let buf = '';

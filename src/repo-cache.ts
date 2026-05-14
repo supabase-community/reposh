@@ -1,10 +1,11 @@
 import { mkdir, stat, readdir, lstat, rm } from 'node:fs/promises'
 import { resolve, join, dirname } from 'node:path'
 import { spawn } from 'node:child_process'
-import { resolveTargetSync, formatTarget } from './parse-target.js'
+import { parseTarget, resolveTargetSync, formatTarget } from './parse-target.js'
+import { resolveTarget } from './resolve-target.js'
 import { checkAllowlist } from './allowlist.js'
 import { CACHE_DIR, CACHE_TTL } from './constants.js'
-import type { GitTarget, RepoCacheConfig, CachedRepo, RepoCache } from './types.js'
+import type { Target, GitTarget, RepoCacheConfig, CachedRepo, RepoCache } from './types.js'
 
 // --- encoding ---
 
@@ -169,6 +170,14 @@ export function ensureRepo(
   config: { cacheDir: string; cacheTtl: number },
   onProgress?: (msg: string) => void,
 ): Promise<string> {
+  return ensureGitRepoInternal(target, config, onProgress)
+}
+
+function ensureGitRepoInternal(
+  target: GitTarget,
+  config: { cacheDir: string; cacheTtl: number },
+  onProgress?: (msg: string) => void,
+): Promise<string> {
   if (target.ref) {
     return ensureWorktreeDir(target, config.cacheDir, config.cacheTtl, onProgress)
   }
@@ -293,13 +302,17 @@ export function createRepoCache(config?: RepoCacheConfig): RepoCache {
       target,
       opts?: { onProgress?: (msg: string) => void; force?: boolean },
     ): Promise<string> {
-      const resolved = typeof target === 'string' ? resolveTargetSync(target) : target
-      if (resolved.source !== 'git') {
-        throw new Error(`npm target resolution not yet implemented`)
-      }
-      checkAllowlist(resolved, allowlist)
+      const parsed: Target = typeof target === 'string'
+        ? (() => {
+            const p = parseTarget(target)
+            if (!p) throw new Error(`Invalid target: ${target}`)
+            return p
+          })()
+        : target
+      const git = await resolveTarget(parsed, { onProgress: opts?.onProgress, force: opts?.force })
+      checkAllowlist(git, allowlist)
       const effectiveTtl = opts?.force ? 0 : cacheTtl
-      return ensureRepo(resolved, { cacheDir, cacheTtl: effectiveTtl }, opts?.onProgress)
+      return ensureGitRepoInternal(git, { cacheDir, cacheTtl: effectiveTtl }, opts?.onProgress)
     },
 
     listRepos: () => listCachedRepos(cacheDir),
