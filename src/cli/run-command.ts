@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 import { Bash, defineCommand, OverlayFs } from 'just-bash';
-import type { RepoTarget } from '../types.js';
+import type { GitTarget } from '../types.js';
 
 export const aliasCommands = [
   defineCommand('ll', (args, ctx) => ctx.exec!(`ls -alF ${args.join(' ')}`, { cwd: ctx.cwd })),
@@ -8,7 +8,7 @@ export const aliasCommands = [
   defineCommand('l', (args, ctx) => ctx.exec!(`ls -CF ${args.join(' ')}`, { cwd: ctx.cwd })),
 ];
 
-export function makePrefix(target: RepoTarget): string {
+export function makePrefix(target: GitTarget): string {
   const base = `/repos/${target.host}/${target.org}/${target.repo}`;
   return target.ref ? `${base}@${target.ref}` : base;
 }

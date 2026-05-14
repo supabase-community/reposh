@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { resolve, join } from 'node:path'
 import { spawn as realSpawn } from 'node:child_process'
-import type { RepoTarget } from './types.js'
+import type { GitTarget } from './types.js'
 
 // Mock child_process before importing the module under test
 vi.mock('node:child_process', () => ({
@@ -51,7 +51,7 @@ function fakeProc(exitCode = 0, stderrData?: string) {
   return proc as unknown as ReturnType<typeof realSpawn>
 }
 
-const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react' }
+const target: GitTarget = { source: 'git', host: 'github.com', org: 'facebook', repo: 'react' }
 
 describe('encodeRef', () => {
   it('encodes slashes', () => {
@@ -178,7 +178,7 @@ describe('ensureRepo', () => {
 })
 
 describe('ensureRepo with ref (worktrees)', () => {
-  const targetWithRef: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0' }
+  const targetWithRef: GitTarget = { source: 'git', host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0' }
   const expectedWtDir = resolve(TEST_CACHE_DIR, 'github.com', 'facebook', 'react@v18.2.0')
 
   beforeEach(() => {
@@ -217,7 +217,7 @@ describe('ensureRepo with ref (worktrees)', () => {
   })
 
   it('encodes slashes in ref for worktree dir name', async () => {
-    const slashRef: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks' }
+    const slashRef: GitTarget = { source: 'git', host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks' }
     const expectedSlashDir = resolve(TEST_CACHE_DIR, 'github.com', 'facebook', 'react@feature~hooks')
 
     mockStat.mockRejectedValue(new Error('ENOENT'))
@@ -272,7 +272,7 @@ describe('ensureRepo with ref (worktrees)', () => {
   })
 
   it('throws descriptive error when ref not found', async () => {
-    const badRef: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'nonexistent-branch' }
+    const badRef: GitTarget = { source: 'git', host: 'github.com', org: 'facebook', repo: 'react', ref: 'nonexistent-branch' }
 
     // First stat call (worktree .git) -> ENOENT (no worktree yet)
     // Second stat calls (main repo) -> ENOENT (no main clone yet)
@@ -311,7 +311,7 @@ describe('createRepoCache', () => {
     vi.resetAllMocks()
   })
 
-  it('resolves string target to RepoTarget', async () => {
+  it('resolves string target to GitTarget', async () => {
     mockStat.mockRejectedValue(new Error('ENOENT'))
     mockSpawn.mockReturnValue(fakeProc(0))
 
@@ -321,7 +321,7 @@ describe('createRepoCache', () => {
     expect(dir).toBe(expectedDir)
   })
 
-  it('accepts RepoTarget object directly', async () => {
+  it('accepts GitTarget object directly', async () => {
     mockStat.mockRejectedValue(new Error('ENOENT'))
     mockSpawn.mockReturnValue(fakeProc(0))
 
@@ -333,7 +333,7 @@ describe('createRepoCache', () => {
 
   it('throws on invalid string target', async () => {
     const cache = createRepoCache({ cacheDir: TEST_CACHE_DIR })
-    await expect(cache.ensureRepo('invalid')).rejects.toThrow('Invalid repo target: invalid')
+    await expect(cache.ensureRepo('invalid')).rejects.toThrow('Invalid target: invalid')
   })
 
   it('checks allowlist before cloning', async () => {

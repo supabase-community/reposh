@@ -3,31 +3,31 @@ import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { makeBash, makePrefix, makeProgressWriter, execCommand } from './run-command.js'
-import type { RepoTarget } from '../types.js'
+import type { GitTarget } from '../types.js'
 
 describe('makePrefix', () => {
   it('builds /repos/<host>/<org>/<repo> path', () => {
-    const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react' }
+    const target: GitTarget = { host: 'github.com', org: 'facebook', repo: 'react' }
     expect(makePrefix(target)).toBe('/repos/github.com/facebook/react')
   })
 
   it('works with custom hosts', () => {
-    const target: RepoTarget = { host: 'gitlab.com', org: 'user', repo: 'project' }
+    const target: GitTarget = { host: 'gitlab.com', org: 'user', repo: 'project' }
     expect(makePrefix(target)).toBe('/repos/gitlab.com/user/project')
   })
 
   it('includes ref in prefix when specified', () => {
-    const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0' }
+    const target: GitTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0' }
     expect(makePrefix(target)).toBe('/repos/github.com/facebook/react@v18.2.0')
   })
 
   it('includes ref with slashes in prefix', () => {
-    const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks' }
+    const target: GitTarget = { host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks' }
     expect(makePrefix(target)).toBe('/repos/github.com/facebook/react@feature/hooks')
   })
 
   it('omits ref from prefix when not specified', () => {
-    const target: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react' }
+    const target: GitTarget = { host: 'github.com', org: 'facebook', repo: 'react' }
     expect(makePrefix(target)).toBe('/repos/github.com/facebook/react')
   })
 })

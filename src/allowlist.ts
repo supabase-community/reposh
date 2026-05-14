@@ -1,7 +1,6 @@
-import { formatRepoTarget } from './parse-target.js'
-import type { RepoTarget, AllowlistEntry } from './types.js'
+import type { GitTarget, AllowlistEntry } from './types.js'
 
-export function checkAllowlist(target: RepoTarget, allowlist?: AllowlistEntry[]): void {
+export function checkAllowlist(target: GitTarget, allowlist?: AllowlistEntry[]): void {
   if (!allowlist || allowlist.length === 0) return
 
   const allowed = allowlist.some(entry => {
@@ -12,6 +11,9 @@ export function checkAllowlist(target: RepoTarget, allowlist?: AllowlistEntry[])
   })
 
   if (!allowed) {
-    throw new Error(`Access denied: ${formatRepoTarget(target)} is not in the allowlist`)
+    const label = target.host === 'github.com'
+      ? `${target.org}/${target.repo}`
+      : `${target.host}/${target.org}/${target.repo}`
+    throw new Error(`Access denied: ${label} is not in the allowlist`)
   }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { parseRepoTarget, formatRepoTarget } from '../parse-target.js';
+import { parseTarget, formatTarget } from '../parse-target.js';
 import { createRepoCache } from '../repo-cache.js';
 import { CACHE_DIR } from '../constants.js';
 import {
@@ -36,8 +36,8 @@ cache
   .argument('<repos...>', 'org/repo[:ref] or host/org/repo[:ref]')
   .action(async (repos: string[]) => {
     for (const arg of repos) {
-      const target = parseRepoTarget(arg);
-      if (!target) {
+      const target = parseTarget(arg);
+      if (!target || target.source !== 'git') {
         console.error(`Invalid repo: ${arg}`);
         process.exit(1);
       }
@@ -47,7 +47,7 @@ cache
       );
       try {
         await repoCache.ensureRepo(target, { onProgress, force: true });
-        console.error(`Cached ${formatRepoTarget(target)}`);
+        console.error(`Cached ${formatTarget(target)}`);
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
@@ -136,8 +136,8 @@ program
       return;
     }
 
-    const target = parseRepoTarget(repo);
-    if (!target) {
+    const target = parseTarget(repo);
+    if (!target || target.source !== 'git') {
       console.error(`Invalid repo or unknown command: ${repo}`);
       process.exit(1);
     }
@@ -176,7 +176,7 @@ program
         process.exit(1);
       }
     } else {
-      startShell(bash, formatRepoTarget(target), {
+      startShell(bash, formatTarget(target), {
         input: process.stdin,
         output: process.stdout,
         stderr: process.stderr,

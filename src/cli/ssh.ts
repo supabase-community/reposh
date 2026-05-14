@@ -14,7 +14,7 @@ import {
   type ExecInfo,
 } from 'ssh2';
 import ssh2 from 'ssh2';
-import { parseRepoTarget, formatRepoTarget } from '../parse-target.js';
+import { parseTarget, formatTarget } from '../parse-target.js';
 import { createRepoCache } from '../repo-cache.js';
 import { HOST_KEY_PATH } from '../constants.js';
 import {
@@ -67,14 +67,16 @@ function handleConnection(client: Connection, log: Log): void {
         accept();
       });
 
-      const target = parseRepoTarget(username);
+      const parsed = parseTarget(username);
+      // SSH path only supports git targets for now (npm resolution wired in a later phase).
+      const target = parsed?.source === 'git' ? parsed : undefined;
       const prefix = target ? makePrefix(target) : '';
       const resolveRepo = (onProgress: (msg: string) => void) =>
         target
           ? repoCache.ensureRepo(target, { onProgress })
           : Promise.reject(
               new Error(
-                'Usage: ssh <org>/<repo>[:ref]@<host> [command]\nExample: ssh facebook/react@reposh ls\nExample: ssh facebook/react:v18.2.0@reposh cat package.json',
+                'Usage: ssh <org>/<repo>[@ref]@<host> [command]\nExample: ssh facebook/react@reposh ls\nExample: ssh facebook/react@v18.2.0@reposh cat package.json',
               ),
             );
 
@@ -139,7 +141,7 @@ function handleConnection(client: Connection, log: Log): void {
         }
 
         const bash = makeBash(repoDir, prefix);
-        const label = target ? formatRepoTarget(target) : 'repo';
+        const label = target ? formatTarget(target) : 'repo';
         channel.write(`${label} shell. Type commands to browse.\r\n$ `);
 
         let buf = '';
@@ -245,9 +247,9 @@ Host reposh
   await writeFile(configPath, existing + block, { mode: 0o600 });
   console.log('Added to ~/.ssh/config:');
   console.log(block.trim());
-  console.log('\nUsage: ssh <org/repo[:ref]>@reposh [command]');
+  console.log('\nUsage: ssh <org/repo[@ref]>@reposh [command]');
   console.log('Example: ssh facebook/react@reposh ls');
-  console.log('Example: ssh facebook/react:v18.2.0@reposh cat package.json');
+  console.log('Example: ssh facebook/react@v18.2.0@reposh cat package.json');
 }
 
 // Creates a duplex stream over stdin/stdout for use as a ProxyCommand.
