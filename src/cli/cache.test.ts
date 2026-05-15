@@ -105,7 +105,7 @@ describe('listCachedRepos (via cacheLs)', () => {
 
     const calls = (console.log as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0])
     expect(calls[0]).toMatch(/^facebook\/react\s+2\.0 KB$/)
-    expect(calls[1]).toMatch(/^facebook\/react:v18\.2\.0\s+1\.0 KB\s+\(worktree\)$/)
+    expect(calls[1]).toMatch(/^facebook\/react@v18\.2\.0\s+1\.0 KB\s+\(worktree\)$/)
     expect(calls[2]).toBe('\n2 entries, 3.0 KB total')
   })
 })
@@ -148,7 +148,7 @@ describe('cacheRm', () => {
 
     await cacheRm(CACHE_DIR, { repo: 'facebook/react', skipConfirm: true })
     expect(mockRemoveCachedRepo).toHaveBeenCalledWith(CACHE_DIR, {
-      host: 'github.com', org: 'facebook', repo: 'react',
+      source: 'git', host: 'github.com', org: 'facebook', repo: 'react',
     })
     expect(console.log).toHaveBeenCalledWith('Removed facebook/react')
   })
@@ -178,9 +178,9 @@ describe('cacheRm', () => {
 
     await cacheRm(CACHE_DIR, { repo: 'facebook/react:v18.2.0', skipConfirm: true })
     expect(mockRemoveCachedRepo).toHaveBeenCalledWith(CACHE_DIR, {
-      host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0',
+      source: 'git', host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0',
     })
-    expect(console.log).toHaveBeenCalledWith('Removed facebook/react:v18.2.0')
+    expect(console.log).toHaveBeenCalledWith('Removed facebook/react@v18.2.0')
   })
 
   it('throws when worktree is not in cache', async () => {
@@ -212,13 +212,13 @@ describe('cacheRm', () => {
     // Should remove each worktree then the main repo
     expect(mockRemoveCachedRepo).toHaveBeenCalledTimes(3)
     expect(mockRemoveCachedRepo).toHaveBeenCalledWith(CACHE_DIR, {
-      host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0',
+      source: 'git', host: 'github.com', org: 'facebook', repo: 'react', ref: 'v18.2.0',
     })
     expect(mockRemoveCachedRepo).toHaveBeenCalledWith(CACHE_DIR, {
-      host: 'github.com', org: 'facebook', repo: 'react', ref: 'canary',
+      source: 'git', host: 'github.com', org: 'facebook', repo: 'react', ref: 'canary',
     })
     expect(mockRemoveCachedRepo).toHaveBeenCalledWith(CACHE_DIR, {
-      host: 'github.com', org: 'facebook', repo: 'react',
+      source: 'git', host: 'github.com', org: 'facebook', repo: 'react',
     })
     expect(console.log).toHaveBeenCalledWith('Removed facebook/react (3 entries)')
   })
@@ -233,8 +233,8 @@ describe('cacheRm', () => {
     await cacheRm(CACHE_DIR, { repo: 'facebook/react:feature/hooks', skipConfirm: true })
 
     expect(mockRemoveCachedRepo).toHaveBeenCalledWith(CACHE_DIR, {
-      host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks',
+      source: 'git', host: 'github.com', org: 'facebook', repo: 'react', ref: 'feature/hooks',
     })
-    expect(console.log).toHaveBeenCalledWith('Removed facebook/react:feature/hooks')
+    expect(console.log).toHaveBeenCalledWith('Removed facebook/react@feature/hooks')
   })
 })

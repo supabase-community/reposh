@@ -7,7 +7,7 @@ reposh lets agents explore any public repo the same way they explore your local 
 Your coding agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if your shell was running in that repo:
 
 ```bash
-reposh colinhacks/zod grep -rl 'ZodError' packages/zod/src/
+reposh tailwindlabs/tailwindcss grep -rl 'theme' .
 ```
 
 ## Why?
@@ -17,9 +17,9 @@ There's a lot of energy going into writing docs, skills, and rule files to help 
 Agents are great at navigating codebases, reposh just extends that to any public repo without any setup.
 
 ```bash
-reposh colinhacks/zod cat packages/zod/src/index.ts
-reposh tailwindlabs/tailwindcss grep -rl 'theme' packages/tailwindcss/src/
+reposh npm:zod cat packages/zod/src/index.ts
 reposh supabase/supabase ls apps/
+reposh tailwindlabs/tailwindcss grep -rl 'theme' .
 ```
 
 See [how it works](#how-it-works) for details on the local caching and sandboxing implementation.
@@ -49,18 +49,18 @@ reposh is designed to be used by LLMs. Once you've [installed the skill](#agent-
 You can also use it directly from the terminal:
 
 ```bash
-reposh <org>/<repo>[:ref] <bash command>
+reposh <org>/<repo>[@ref] <bash command>
 ```
 
-Append `:ref` to target a specific branch or tag:
+Append `@ref` to target a specific branch, tag, or commit SHA.
 
 ```bash
-reposh facebook/react:v18.2.0 cat package.json
-reposh vercel/next.js:canary ls src/
-reposh gitlab.com/org/project:main ls
+reposh facebook/react@v18.2.0 cat package.json
+reposh vercel/next.js@canary ls src/
+reposh reposh octocat/Hello-World@<commit-sha> cat README
 ```
 
-Without `:ref`, reposh uses the repository's default branch. Commit hashes are not currently supported.
+Without `@ref`, reposh uses the repository's default branch.
 
 ### Non-GitHub repos
 
@@ -78,6 +78,41 @@ reposh gitea.com/some-org/some-repo ls
 ```
 
 Repos are always accessed over HTTPS.
+
+### npm packages
+
+To read the source of an installed npm dependency, use the `npm:` prefix - reposh resolves it to the underlying git source and commit:
+
+```bash
+reposh npm:lodash                 # version installed in your project; falls back to latest
+reposh npm:lodash@4.17.21         # specific version
+reposh npm:@types/node@20.0.0     # scoped package
+reposh npm:react@next             # dist-tag
+```
+
+When you omit the version (`npm:lodash`), reposh first looks up the version installed in your local project (via node's standard `require.resolve` - works with npm, pnpm, yarn, bun). If not installed locally, it falls back to the registry's `latest` dist-tag. `npm:<pkg>@latest` is an explicit opt-in to the registry's latest, bypassing the local lookup.
+
+reposh resolves an npm target to a git source by:
+
+1. Reading the npm [provenance attestation](https://docs.npmjs.com/generating-provenance-statements), if the package was published with `--provenance`. This gives the exact commit SHA.
+2. Falling back to the package.json `repository` field plus a best-effort tag match (`v1.2.3`, `1.2.3`, `<pkg>@1.2.3`, ...).
+
+If neither path resolves cleanly, reposh prints a progressive error so you can pin the right ref directly:
+
+```
+Failed to resolve npm:somepkg@1.2.3
+  no provenance attestation
+  package.json#repository -> github.com/foo/bar
+  no matching tag (tried: v1.2.3, 1.2.3, somepkg@1.2.3, somepkg-v1.2.3, somepkg-1.2.3)
+
+Try directly: reposh foo/bar@<tag>
+```
+
+Resolved mappings are cached under `~/.reposh/package-resolutions/` so repeat lookups are instant. If the registry is unreachable and a stale resolution exists, reposh serves it with a warning rather than failing - so common npm targets keep working offline.
+
+### Other package managers
+
+If you'd like reposh to support other package managers, please [open an issue](https://github.com/supabase-community/reposh/issues).
 
 ## How it works
 
@@ -145,7 +180,7 @@ You can also list, inspect, and clean up cached repos:
 ```bash
 reposh cache ls                     # list cached repos with sizes
 reposh cache rm facebook/react      # remove a repo and its worktrees
-reposh cache rm facebook/react:v18  # remove a single worktree
+reposh cache rm facebook/react@v18  # remove a single worktree
 reposh cache rm --all               # clear the entire cache
 ```
 
@@ -198,11 +233,11 @@ Returns a `RepoCache` instance. All config fields are optional - defaults to `~/
 
 ### `RepoCache`
 
-| Method                      | Description                                                                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ensureRepo(target, opts?)` | Clone or refresh a repo. Returns the local path. Accepts `'org/repo'`, `'org/repo:ref'`, or a `RepoTarget` object. Options: `onProgress`, `force`. |
-| `listRepos()`               | List all cached repos with metadata.                                                                                                               |
-| `removeRepo(target)`        | Remove a cached repo and its worktrees.                                                                                                            |
+| Method                      | Description                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ensureRepo(target, opts?)` | Clone or refresh a repo. Returns the local path. Accepts `'org/repo'`, `'org/repo@ref'` (or legacy `'org/repo:ref'`), or a `RepoTarget` object. Options: `onProgress`, `force`. |
+| `listRepos()`               | List all cached repos with metadata.                                                                                                                                            |
+| `removeRepo(target)`        | Remove a cached repo and its worktrees.                                                                                                                                         |
 
 ### Allowlist
 

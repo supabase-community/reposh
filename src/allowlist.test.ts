@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { checkAllowlist } from './allowlist.js'
-import type { RepoTarget, AllowlistEntry } from './types.js'
+import type { GitTarget, AllowlistEntry } from './types.js'
 
-const supabaseTarget: RepoTarget = { host: 'github.com', org: 'supabase', repo: 'postgres' }
-const facebookTarget: RepoTarget = { host: 'github.com', org: 'facebook', repo: 'react' }
-const gitlabTarget: RepoTarget = { host: 'gitlab.com', org: 'myorg', repo: 'myrepo' }
+const supabaseTarget: GitTarget = { source: 'git', host: 'github.com', org: 'supabase', repo: 'postgres' }
+const facebookTarget: GitTarget = { source: 'git', host: 'github.com', org: 'facebook', repo: 'react' }
+const gitlabTarget: GitTarget = { source: 'git', host: 'gitlab.com', org: 'myorg', repo: 'myrepo' }
 
 describe('checkAllowlist', () => {
   it('allows all when no allowlist provided', () => {
@@ -46,7 +46,7 @@ describe('checkAllowlist', () => {
 
   it('allows any repo when repos is omitted', () => {
     const allowlist: AllowlistEntry[] = [{ host: 'github.com', org: 'supabase' }]
-    const other: RepoTarget = { host: 'github.com', org: 'supabase', repo: 'auth' }
+    const other: GitTarget = { source: 'git', host: 'github.com', org: 'supabase', repo: 'auth' }
     expect(() => checkAllowlist(supabaseTarget, allowlist)).not.toThrow()
     expect(() => checkAllowlist(other, allowlist)).not.toThrow()
   })

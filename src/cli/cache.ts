@@ -1,7 +1,12 @@
 import { createInterface } from 'node:readline'
 import { rm } from 'node:fs/promises'
-import { parseRepoTarget, formatRepoTarget } from '../parse-target.js'
+import { parseTarget, formatTarget } from '../parse-target.js'
 import { listCachedRepos, removeCachedRepo } from '../repo-cache.js'
+import type { CachedRepo } from '../types.js'
+
+function formatCachedRepo(r: CachedRepo): string {
+  return formatTarget({ source: 'git', host: r.host, org: r.org, repo: r.repo, ...(r.ref && { ref: r.ref }) })
+}
 
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -44,7 +49,7 @@ export async function cacheLs(cacheDir: string): Promise<void> {
   })
 
   // Find max label length for alignment
-  const labels = repos.map(r => formatRepoTarget(r))
+  const labels = repos.map(r => formatCachedRepo(r))
   const maxLen = Math.max(...labels.map(l => l.length))
 
   for (let i = 0; i < repos.length; i++) {
@@ -80,12 +85,12 @@ export async function cacheRm(cacheDir: string, opts: { repo?: string; all?: boo
     return
   }
 
-  const target = parseRepoTarget(repo!)
-  if (!target) {
+  const target = parseTarget(repo!)
+  if (!target || target.source !== 'git') {
     throw new Error(`Invalid repo: ${repo}`)
   }
 
-  const label = formatRepoTarget(target)
+  const label = formatTarget(target)
 
   if (target.ref) {
     // Verify it exists by checking cached repos
@@ -117,13 +122,13 @@ export async function cacheRm(cacheDir: string, opts: { repo?: string; all?: boo
   if (worktrees.length > 0) {
     if (!skipConfirm) {
       console.log(`This will also remove ${worktrees.length} worktree${worktrees.length === 1 ? '' : 's'}:`)
-      for (const wt of worktrees) console.log(`  ${formatRepoTarget(wt)}`)
+      for (const wt of worktrees) console.log(`  ${formatCachedRepo(wt)}`)
       const ok = await confirm(`Remove ${label} and all worktrees?`)
       if (!ok) return
     }
 
     for (const wt of worktrees) {
-      await removeCachedRepo(cacheDir, { host: wt.host, org: wt.org, repo: wt.repo, ref: wt.ref })
+      await removeCachedRepo(cacheDir, { source: 'git', host: wt.host, org: wt.org, repo: wt.repo, ref: wt.ref })
     }
   } else if (!skipConfirm) {
     const ok = await confirm(`Remove ${label}?`)

@@ -1,10 +1,11 @@
 import { mkdir, stat, readdir, lstat, rm } from 'node:fs/promises'
 import { resolve, join, dirname } from 'node:path'
 import { spawn } from 'node:child_process'
-import { resolveRepoTarget, formatRepoTarget } from './parse-target.js'
+import { parseTarget, resolveTargetSync, formatTarget } from './parse-target.js'
+import { resolveTarget } from './resolve-target.js'
 import { checkAllowlist } from './allowlist.js'
 import { CACHE_DIR, CACHE_TTL } from './constants.js'
-import type { RepoTarget, RepoCacheConfig, CachedRepo, RepoCache } from './types.js'
+import type { Target, GitTarget, RepoCacheConfig, CachedRepo, RepoCache } from './types.js'
 
 // --- encoding ---
 
@@ -21,11 +22,11 @@ function decodeRef(encoded: string): string {
 
 // --- path helpers ---
 
-function repoDirPath(cacheDir: string, target: RepoTarget): string {
+function repoDirPath(cacheDir: string, target: GitTarget): string {
   return resolve(cacheDir, target.host, target.org, target.repo)
 }
 
-function worktreeDirPath(cacheDir: string, target: RepoTarget): string {
+function worktreeDirPath(cacheDir: string, target: GitTarget): string {
   return resolve(cacheDir, target.host, target.org, `${target.repo}@${encodeRef(target.ref!)}`)
 }
 
@@ -83,7 +84,7 @@ function runGit(
 }
 
 async function cloneRepo(
-  target: RepoTarget,
+  target: GitTarget,
   dir: string,
   onProgress?: (msg: string) => void,
 ): Promise<void> {
@@ -104,12 +105,12 @@ async function refreshRepo(dir: string): Promise<void> {
 
 // Ensure the main clone (default branch) exists and is fresh
 async function ensureMainClone(
-  target: RepoTarget,
+  target: GitTarget,
   cacheDir: string,
   cacheTtl: number,
   onProgress?: (msg: string) => void,
 ): Promise<string> {
-  const baseTarget: RepoTarget = { host: target.host, org: target.org, repo: target.repo }
+  const baseTarget: GitTarget = { source: 'git', host: target.host, org: target.org, repo: target.repo }
   const dir = repoDirPath(cacheDir, baseTarget)
 
   const age = await repoAgeMs(dir)
@@ -128,15 +129,49 @@ async function ensureMainClone(
   return dir
 }
 
+/**
+ * Try fetching each candidate ref into the main clone; return the name of the
+ * first ref that succeeds. Throws an error listing all candidates if none match.
+ *
+ * Used by the npm resolver fallback path to test which git tag scheme the
+ * upstream repo uses for a given version.
+ */
+export async function tryFetchAnyRef(
+  cacheDir: string,
+  base: { host: string; org: string; repo: string },
+  candidates: string[],
+  onProgress?: (msg: string) => void,
+): Promise<string> {
+  // Ensure main clone exists (the object store we'll fetch into).
+  // Use cacheTtl=Infinity so we don't force a refresh based on caller staleness preferences;
+  // the fetch of the candidate ref itself is the network op we care about.
+  const mainTarget: GitTarget = { source: 'git', host: base.host, org: base.org, repo: base.repo }
+  const mainDir = await ensureMainClone(mainTarget, cacheDir, Infinity, onProgress)
+
+  let lastErr: Error | undefined
+  for (const ref of candidates) {
+    try {
+      await runGit(['fetch', '--depth=1', 'origin', ref], { cwd: mainDir })
+      return ref
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+
+  const tried = candidates.join(', ')
+  const detail = lastErr ? ` (last error: ${lastErr.message})` : ''
+  throw new Error(`No matching ref (tried: ${tried})${detail}`)
+}
+
 // Ensure a worktree exists for a specific ref
 async function ensureWorktreeDir(
-  target: RepoTarget,
+  target: GitTarget,
   cacheDir: string,
   cacheTtl: number,
   onProgress?: (msg: string) => void,
 ): Promise<string> {
   const wtDir = worktreeDirPath(cacheDir, target)
-  const label = formatRepoTarget(target)
+  const label = formatTarget(target)
 
   const age = await worktreeAgeMs(wtDir)
   if (age < cacheTtl) return wtDir
@@ -148,7 +183,7 @@ async function ensureWorktreeDir(
   try {
     await runGit(['fetch', '--depth=1', 'origin', target.ref!], { cwd: mainDir, onStderr: onProgress })
   } catch {
-    throw new Error(`Branch or tag '${target.ref}' not found in ${target.org}/${target.repo}`)
+    throw new Error(`Branch, tag, or commit SHA '${target.ref}' not found in ${target.org}/${target.repo}`)
   }
 
   if (age === Infinity) {
@@ -165,7 +200,15 @@ async function ensureWorktreeDir(
 }
 
 export function ensureRepo(
-  target: RepoTarget,
+  target: GitTarget,
+  config: { cacheDir: string; cacheTtl: number },
+  onProgress?: (msg: string) => void,
+): Promise<string> {
+  return ensureGitRepoInternal(target, config, onProgress)
+}
+
+function ensureGitRepoInternal(
+  target: GitTarget,
   config: { cacheDir: string; cacheTtl: number },
   onProgress?: (msg: string) => void,
 ): Promise<string> {
@@ -245,12 +288,12 @@ function runGitWorktreeRemove(mainDir: string, wtDir: string): Promise<void> {
   })
 }
 
-export async function removeCachedRepo(cacheDir: string, target: RepoTarget): Promise<void> {
+export async function removeCachedRepo(cacheDir: string, target: GitTarget): Promise<void> {
   if (target.ref) {
     const wtDir = join(cacheDir, target.host, target.org, `${target.repo}@${encodeRef(target.ref)}`)
     const exists = await stat(wtDir).catch(() => null)
     if (!exists) {
-      throw new Error(`Not in cache: ${formatRepoTarget(target)}`)
+      throw new Error(`Not in cache: ${formatTarget(target)}`)
     }
     const mainDir = join(cacheDir, target.host, target.org, target.repo)
     await runGitWorktreeRemove(mainDir, wtDir)
@@ -261,7 +304,7 @@ export async function removeCachedRepo(cacheDir: string, target: RepoTarget): Pr
   const mainDir = join(cacheDir, target.host, target.org, target.repo)
   const exists = await stat(mainDir).catch(() => null)
   if (!exists) {
-    throw new Error(`Not in cache: ${formatRepoTarget(target)}`)
+    throw new Error(`Not in cache: ${formatTarget(target)}`)
   }
 
   // Find and remove worktrees for this repo
@@ -290,18 +333,33 @@ export function createRepoCache(config?: RepoCacheConfig): RepoCache {
 
   return {
     async ensureRepo(
-      target: string | RepoTarget,
-      opts?: { onProgress?: (msg: string) => void; force?: boolean },
+      target,
+      opts?: { onProgress?: (msg: string) => void; force?: boolean; cwd?: string },
     ): Promise<string> {
-      const resolved = resolveRepoTarget(target)
-      checkAllowlist(resolved, allowlist)
+      const parsed: Target = typeof target === 'string'
+        ? (() => {
+            const p = parseTarget(target)
+            if (!p) throw new Error(`Invalid target: ${target}`)
+            return p
+          })()
+        : target
+      const git = await resolveTarget(parsed, {
+        onProgress: opts?.onProgress,
+        force: opts?.force,
+        cwd: opts?.cwd,
+      })
+      checkAllowlist(git, allowlist)
       const effectiveTtl = opts?.force ? 0 : cacheTtl
-      return ensureRepo(resolved, { cacheDir, cacheTtl: effectiveTtl }, opts?.onProgress)
+      return ensureGitRepoInternal(git, { cacheDir, cacheTtl: effectiveTtl }, opts?.onProgress)
     },
 
     listRepos: () => listCachedRepos(cacheDir),
-    async removeRepo(target: string | RepoTarget): Promise<void> {
-      return removeCachedRepo(cacheDir, resolveRepoTarget(target))
+    async removeRepo(target: string | GitTarget): Promise<void> {
+      const resolved = typeof target === 'string' ? resolveTargetSync(target) : target
+      if (resolved.source !== 'git') {
+        throw new Error(`removeRepo only accepts git targets`)
+      }
+      return removeCachedRepo(cacheDir, resolved)
     },
   }
 }

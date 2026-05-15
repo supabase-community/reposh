@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { parseRepoTarget, formatRepoTarget } from '../parse-target.js';
+import { parseTarget, formatTarget } from '../parse-target.js';
+import { resolveTarget } from '../resolve-target.js';
 import { createRepoCache } from '../repo-cache.js';
 import { CACHE_DIR } from '../constants.js';
+import type { GitTarget } from '../types.js';
 import {
   makeBash,
   makePrefix,
@@ -36,8 +38,8 @@ cache
   .argument('<repos...>', 'org/repo[:ref] or host/org/repo[:ref]')
   .action(async (repos: string[]) => {
     for (const arg of repos) {
-      const target = parseRepoTarget(arg);
-      if (!target) {
+      const parsed = parseTarget(arg);
+      if (!parsed) {
         console.error(`Invalid repo: ${arg}`);
         process.exit(1);
       }
@@ -46,8 +48,10 @@ cache
         process.stdin.isTTY ?? false,
       );
       try {
-        await repoCache.ensureRepo(target, { onProgress, force: true });
-        console.error(`Cached ${formatRepoTarget(target)}`);
+        const cwd = process.cwd();
+        const resolved = await resolveTarget(parsed, { onProgress, force: true, cwd });
+        await repoCache.ensureRepo(resolved, { onProgress, force: true, cwd });
+        console.error(`Cached ${formatTarget(parsed)}`);
       } catch (err) {
         console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
@@ -136,8 +140,8 @@ program
       return;
     }
 
-    const target = parseRepoTarget(repo);
-    if (!target) {
+    const parsed = parseTarget(repo);
+    if (!parsed) {
       console.error(`Invalid repo or unknown command: ${repo}`);
       process.exit(1);
     }
@@ -148,15 +152,19 @@ program
       isInteractive,
     );
 
+    const cwd = process.cwd();
+
+    let resolved: GitTarget;
     let repoDir: string;
     try {
-      repoDir = await repoCache.ensureRepo(target, { onProgress });
+      resolved = await resolveTarget(parsed, { onProgress, cwd });
+      repoDir = await repoCache.ensureRepo(resolved, { onProgress, cwd });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
 
-    const prefix = makePrefix(target);
+    const prefix = makePrefix(resolved);
     const bash = makeBash(repoDir, prefix);
 
     if (command.length > 0) {
@@ -176,7 +184,7 @@ program
         process.exit(1);
       }
     } else {
-      startShell(bash, formatRepoTarget(target), {
+      startShell(bash, formatTarget(parsed), {
         input: process.stdin,
         output: process.stdout,
         stderr: process.stderr,
