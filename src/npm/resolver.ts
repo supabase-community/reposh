@@ -54,17 +54,12 @@ export async function resolveNpm(target: NpmTarget, opts: ResolveNpmOptions = {}
   const resolutionsDir = opts.resolutionsDir ?? RESOLUTIONS_DIR
   const spec = target.version ? `${target.name}@${target.version}` : target.name
 
-  onProgress(`Resolving npm:${spec}...\n`)
-
-  // 1. Local-first resolution (no network). When the version is omitted and
-  //    we have a project cwd, try to find a locally installed copy and use
-  //    its version + repository field. Survives a registry outage.
+  // 1. Local-first probe (no network). When the version is omitted and we have
+  //    a project cwd, try to find a locally installed copy. Silent here - we
+  //    only announce work once we know the cache misses.
   let localInfo: InstalledPackage | undefined
   if (target.version === undefined && opts.cwd) {
     localInfo = await findInstalledPackage(opts.cwd, target.name)
-    if (localInfo) {
-      onProgress(`  using locally installed ${target.name}@${localInfo.version}\n`)
-    }
   }
 
   // 2. Cache key derivation. Pinned (exact semver, including local-install hits)
@@ -82,14 +77,17 @@ export async function resolveNpm(target: NpmTarget, opts: ResolveNpmOptions = {}
     cacheKey = explicit ?? 'latest'
   }
 
-  // 3. Read-through cache (unless force).
+  // 3. Read-through cache (unless force). Silent on hit - mirrors the git
+  //    layer, which is silent when serving from the on-disk cache.
   if (!opts.force) {
     const cached = await readResolution(resolutionsDir, target.name, cacheKey, { maxAgeMs: CACHE_TTL })
-    if (cached) {
-      const resolved = cachedToGitTarget(cached)
-      onProgress(`  cached resolution -> ${formatTarget(resolved, { full: true })}\n`)
-      return resolved
-    }
+    if (cached) return cachedToGitTarget(cached)
+  }
+
+  // From here on we're doing real work - announce it.
+  onProgress(`Resolving npm:${spec}...\n`)
+  if (localInfo) {
+    onProgress(`  using locally installed ${target.name}@${localInfo.version}\n`)
   }
 
   // 4. Resolve fresh. On any registry/network failure, fall back to a stale
