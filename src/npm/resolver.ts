@@ -85,7 +85,7 @@ export async function resolveNpm(target: NpmTarget, opts: ResolveNpmOptions = {}
   if (!opts.force) {
     const cached = await readResolution(resolutionsDir, target.name, cacheKey, { maxAgeMs: CACHE_TTL })
     if (cached) {
-      onProgress(`  cached resolution -> ${cached.host}/${cached.org}/${cached.repo}@${shortSha(cached.ref)}\n`)
+      onProgress(`  cached resolution -> ${cached.host}/${cached.org}/${cached.repo}@${cached.ref}\n`)
       return cachedToGitTarget(cached)
     }
   }
@@ -103,7 +103,7 @@ export async function resolveNpm(target: NpmTarget, opts: ResolveNpmOptions = {}
 
     const provenance = await tryProvenance(target.name, exactVersion, onProgress)
     if (provenance) {
-      onProgress(`  -> ${formatGit(provenance)}@${shortSha(provenance.ref)} (verified via npm provenance)\n`)
+      onProgress(`  -> ${formatGit(provenance)}@${provenance.ref} (verified via npm provenance)\n`)
       await writeResolution(resolutionsDir, target.name, cacheKey, {
         host: provenance.host, org: provenance.org, repo: provenance.repo, ref: provenance.ref,
       })
@@ -230,6 +230,3 @@ function formatGit(t: GitTarget): string {
   return t.host === 'github.com' ? `${t.org}/${t.repo}` : `${t.host}/${t.org}/${t.repo}`
 }
 
-function shortSha(s: string): string {
-  return s.length === 40 ? s.slice(0, 7) : s
-}

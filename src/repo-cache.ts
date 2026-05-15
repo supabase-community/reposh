@@ -183,7 +183,7 @@ async function ensureWorktreeDir(
   try {
     await runGit(['fetch', '--depth=1', 'origin', target.ref!], { cwd: mainDir, onStderr: onProgress })
   } catch {
-    throw new Error(`Branch or tag '${target.ref}' not found in ${target.org}/${target.repo}`)
+    throw new Error(`Branch, tag, or commit SHA '${target.ref}' not found in ${target.org}/${target.repo}`)
   }
 
   if (age === Infinity) {

@@ -287,7 +287,7 @@ describe('ensureRepo with ref (worktrees)', () => {
     })
 
     await expect(ensureRepo(badRef, TEST_CONFIG)).rejects.toThrow(
-      "Branch or tag 'nonexistent-branch' not found in facebook/react",
+      "Branch, tag, or commit SHA 'nonexistent-branch' not found in facebook/react",
     )
   })
 
