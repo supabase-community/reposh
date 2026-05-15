@@ -7,7 +7,7 @@ reposh lets agents explore any public repo the same way they explore your local 
 Your coding agent (e.g. Claude Code) just prefixes their bash command with `reposh <org>/<repo>` and the rest works as if your shell was running in that repo:
 
 ```bash
-reposh colinhacks/zod grep -rl 'ZodError' packages/zod/src/
+reposh tailwindlabs/tailwindcss grep -rl 'theme' .
 ```
 
 ## Why?
@@ -17,9 +17,9 @@ There's a lot of energy going into writing docs, skills, and rule files to help 
 Agents are great at navigating codebases, reposh just extends that to any public repo without any setup.
 
 ```bash
-reposh colinhacks/zod cat packages/zod/src/index.ts
-reposh tailwindlabs/tailwindcss grep -rl 'theme' packages/tailwindcss/src/
+reposh npm:zod cat packages/zod/src/index.ts
 reposh supabase/supabase ls apps/
+reposh tailwindlabs/tailwindcss grep -rl 'theme' .
 ```
 
 See [how it works](#how-it-works) for details on the local caching and sandboxing implementation.
@@ -52,25 +52,15 @@ You can also use it directly from the terminal:
 reposh <org>/<repo>[@ref] <bash command>
 ```
 
-Append `@ref` to target a specific branch or tag:
+Append `@ref` to target a specific branch, tag, or commit SHA.
 
 ```bash
 reposh facebook/react@v18.2.0 cat package.json
 reposh vercel/next.js@canary ls src/
-reposh gitlab.com/org/project@main ls
+reposh reposh octocat/Hello-World@<commit-sha> cat README
 ```
 
 Without `@ref`, reposh uses the repository's default branch.
-
-The legacy `:ref` separator (e.g. `facebook/react:v18.2.0`) is still recognized for backward compatibility, but `@ref` is the canonical form.
-
-You can also write the source explicitly with a `git:` prefix:
-
-```bash
-reposh git:facebook/react@v18.2.0 ls       # same as reposh facebook/react@v18.2.0 ls
-```
-
-This is mainly useful for symmetry with `npm:` (and future sources like `pypi:`, `crates:`).
 
 ### Non-GitHub repos
 
