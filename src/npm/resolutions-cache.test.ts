@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { mkdtemp, rm, stat, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readResolution, writeResolution } from './resolutions-cache.js'
@@ -52,8 +52,15 @@ describe('resolutions-cache', () => {
     })
     // Fresh: returns the entry
     expect(await readResolution(dir, 'lodash', 'latest', { maxAgeMs: 60_000 })).toBeDefined()
-    // Force "ancient" by passing 0 max age
-    expect(await readResolution(dir, 'lodash', 'latest', { maxAgeMs: 0 })).toBeUndefined()
+
+    // Make the entry ancient by rewriting resolvedAt to epoch zero.
+    // (Don't rely on wall-clock drift between write and read — too flaky.)
+    const path = join(dir, 'npm', 'lodash', 'latest.json')
+    const parsed = JSON.parse(await readFile(path, 'utf8'))
+    parsed.resolvedAt = 0
+    await writeFile(path, JSON.stringify(parsed))
+
+    expect(await readResolution(dir, 'lodash', 'latest', { maxAgeMs: 60_000 })).toBeUndefined()
   })
 
   it('round-trips scoped packages in nested paths', async () => {
