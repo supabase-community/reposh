@@ -10,6 +10,7 @@ import { parseAttestationBundle } from './provenance.js'
 import { parseRepositoryField } from './repo-url.js'
 import { tagCandidates } from './tag-candidates.js'
 import { tryFetchAnyRef } from '../repo-cache.js'
+import { formatTarget } from '../parse-target.js'
 import { readResolution, writeResolution, type ResolutionRecord } from './resolutions-cache.js'
 import { findInstalledPackage, type InstalledPackage } from './project-version.js'
 
@@ -85,8 +86,9 @@ export async function resolveNpm(target: NpmTarget, opts: ResolveNpmOptions = {}
   if (!opts.force) {
     const cached = await readResolution(resolutionsDir, target.name, cacheKey, { maxAgeMs: CACHE_TTL })
     if (cached) {
-      onProgress(`  cached resolution -> ${cached.host}/${cached.org}/${cached.repo}@${cached.ref}\n`)
-      return cachedToGitTarget(cached)
+      const resolved = cachedToGitTarget(cached)
+      onProgress(`  cached resolution -> ${formatTarget(resolved, { full: true })}\n`)
+      return resolved
     }
   }
 
@@ -103,7 +105,7 @@ export async function resolveNpm(target: NpmTarget, opts: ResolveNpmOptions = {}
 
     const provenance = await tryProvenance(target.name, exactVersion, onProgress)
     if (provenance) {
-      onProgress(`  -> ${formatGit(provenance)}@${provenance.ref} (verified via npm provenance)\n`)
+      onProgress(`  -> ${formatTarget(provenance, { full: true })} (verified via npm provenance)\n`)
       await writeResolution(resolutionsDir, target.name, cacheKey, {
         host: provenance.host, org: provenance.org, repo: provenance.repo, ref: provenance.ref,
       })
@@ -211,22 +213,18 @@ async function resolveFallback(
     )
   }
 
-  onProgress(`  -> ${loc.host}/${loc.org}/${loc.repo}@${matched} (via package.json#repository)\n`)
-
-  return {
+  const resolved: GitTarget = {
     source: 'git',
     host: loc.host,
     org: loc.org,
     repo: loc.repo,
     ref: matched,
   }
+  onProgress(`  -> ${formatTarget(resolved, { full: true })} (via package.json#repository)\n`)
+  return resolved
 }
 
 function cachedToGitTarget(c: ResolutionRecord): GitTarget {
   return { source: 'git', host: c.host, org: c.org, repo: c.repo, ref: c.ref }
-}
-
-function formatGit(t: GitTarget): string {
-  return t.host === 'github.com' ? `${t.org}/${t.repo}` : `${t.host}/${t.org}/${t.repo}`
 }
 

@@ -127,16 +127,23 @@ function parseNpmTarget(input: string): NpmTarget | undefined {
   return { source: 'npm', name, ...(version && { version }) }
 }
 
-/** Format a {@link Target} into its canonical string form. */
-export function formatTarget(target: Target): string {
-  if (target.source === 'git') return formatGitTarget(target)
+/**
+ * Format a {@link Target} into its canonical string form.
+ *
+ * For git targets, `github.com` is elided by default to match the shorthand
+ * input syntax. Pass `{ full: true }` to always include the host - useful
+ * for logs where the host should be explicit.
+ */
+export function formatTarget(target: Target, opts?: { full?: boolean }): string {
+  if (target.source === 'git') return formatGitTarget(target, opts)
   return formatNpmTarget(target)
 }
 
-function formatGitTarget(target: GitTarget): string {
-  const base = target.host === 'github.com'
-    ? `${target.org}/${target.repo}`
-    : `${target.host}/${target.org}/${target.repo}`
+function formatGitTarget(target: GitTarget, opts?: { full?: boolean }): string {
+  const showHost = opts?.full || target.host !== 'github.com'
+  const base = showHost
+    ? `${target.host}/${target.org}/${target.repo}`
+    : `${target.org}/${target.repo}`
   return target.ref ? `${base}@${target.ref}` : base
 }
 
